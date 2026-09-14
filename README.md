@@ -47,15 +47,22 @@ cd EventHub_mobile
 flutter pub get
 ```
 
-### 2. Configuración del Servidor Backend
-Por defecto, la app detecta automáticamente el host:
-* **En Emulador Android**: Se conecta automáticamente a `http://10.0.2.2:4000/api`.
-* **En iOS Simulator / Web / Desktop**: Se conecta a `http://localhost:4000/api`.
-* **En Celular Físico (WiFi)**: Ejecutá indicando la IP de tu computadora en tu red local:
-  ```bash
-  flutter run --dart-define=API_URL=http://192.168.1.50:4000/api
-  ```
-  *(O usando `ApiConfig.setCustomHost("http://192.168.1.50:4000/api")` en `main.dart`)*.
+### 2. Configuración del Servidor Backend (.env)
+Creá o editá el archivo `.env` en la raíz de `EventHub_mobile` (basado en `.env.example`):
+```env
+API_URL=http://10.0.2.2:4000/api
+```
+
+Para correr la app leyendo tu `.env`:
+```bash
+flutter run --dart-define-from-file=.env
+```
+
+* **Detección inteligente sin .env**: Si ejecutás simplemente `flutter run`, la app detecta automáticamente:
+  - En **Emulador Android**: se conecta a `http://10.0.2.2:4000/api`.
+  - En **iOS / Web / Desktop**: se conecta a `http://localhost:4000/api`.
+* **Para Celular Físico en WiFi**:
+  Poné la IP de tu PC en `.env` (ej. `API_URL=http://192.168.1.50:4000/api`) y ejecutás con `flutter run --dart-define-from-file=.env`.
 
 ### 3. Compilar APK para pruebas
 ```bash
