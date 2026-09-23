@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 import '../models/event.dart';
 
 class EventCard extends StatelessWidget {
@@ -13,90 +14,124 @@ class EventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2C2C2C), width: 1),
-        boxShadow: [
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border, width: 1),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Color(0x0A000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           onTap: onTap,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Imagen de cabecera con Badge de fecha y categoría
+              // Imagen de cabecera con badges
               Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
-                      child: event.heroImage.isNotEmpty
+                      child: event.displayHeroImage.isNotEmpty
                           ? Image.network(
-                              event.heroImage,
+                              event.displayHeroImage,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) => Container(
-                                color: const Color(0xFF252525),
-                                child: const Icon(Icons.broken_image, color: Colors.white38, size: 48),
+                                color: AppColors.bgSoft,
+                                child: const Icon(Icons.broken_image, color: AppColors.fgLight, size: 44),
                               ),
                             )
                           : Container(
-                              color: const Color(0xFF252525),
-                              child: const Icon(Icons.event, color: Colors.white38, size: 48),
+                              color: AppColors.bgSoft,
+                              child: const Icon(Icons.event, color: AppColors.fgLight, size: 44),
                             ),
                     ),
                   ),
 
-                  // Categoría
+                  // Badge contador de fotos si tiene varias
+                  if (event.allPhotos.length > 1)
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.photo_library_outlined, color: Colors.white, size: 12),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${event.allPhotos.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // Badge de Categoría
                   Positioned(
                     top: 12,
                     left: 12,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEC3013).withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(20),
+                        color: AppColors.accent,
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         event.category.toUpperCase(),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppColors.accentFg,
                           fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
                         ),
                       ),
                     ),
                   ),
 
-                  // Fecha corta
+                  // Badge de Fecha
                   Positioned(
                     bottom: 12,
                     right: 12,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.85),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white24, width: 0.5),
+                        color: Colors.white.withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.border, width: 0.5),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14000000),
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Text(
                         event.shortDate,
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppColors.fg,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
@@ -106,7 +141,7 @@ class EventCard extends StatelessWidget {
                 ],
               ),
 
-              // Contenido de la tarjeta
+              // Contenido descriptivo
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -114,10 +149,11 @@ class EventCard extends StatelessWidget {
                   children: [
                     Text(
                       event.title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
+                      style: const TextStyle(
+                        color: AppColors.fg,
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
+                        height: 1.25,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -127,12 +163,16 @@ class EventCard extends StatelessWidget {
                     // Ubicación
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFFEC3013)),
+                        const Icon(Icons.location_on_outlined, size: 16, color: AppColors.accent),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             event.location.isNotEmpty ? event.location : 'Lugar por confirmar',
-                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                            style: const TextStyle(
+                              color: AppColors.fgMuted,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -141,24 +181,28 @@ class EventCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
 
-                    // Divisor y Precio
-                    Container(height: 1, color: const Color(0xFF2C2C2C)),
+                    // Divisor
+                    const Divider(height: 1, color: AppColors.border),
                     const SizedBox(height: 12),
+
+                    // Precio y Botón de acción
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
                               'Entradas desde',
-                              style: TextStyle(color: Colors.white38, fontSize: 11),
+                              style: TextStyle(color: AppColors.fgMuted, fontSize: 11),
                             ),
+                            const SizedBox(height: 2),
                             Text(
                               'Bs. ${event.minPrice.toStringAsFixed(2)}',
                               style: const TextStyle(
-                                color: Color(0xFFEC3013),
-                                fontSize: 17,
+                                color: AppColors.accent,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -167,15 +211,16 @@ class EventCard extends StatelessWidget {
                         ElevatedButton(
                           onPressed: onTap,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFEC3013),
-                            foregroundColor: Colors.white,
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: AppColors.accentFg,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             elevation: 0,
                           ),
                           child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Text('Ver evento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                               SizedBox(width: 4),

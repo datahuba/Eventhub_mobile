@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 import '../models/event.dart';
 import '../services/api_service.dart';
 import '../widgets/event_card.dart';
+import '../widgets/event_filter_sheet.dart';
+import '../widgets/event_search_bar.dart';
+import '../widgets/eventhub_logo.dart';
 import 'event_detail_screen.dart';
 import 'tickets_screen.dart';
+
+const List<String> _monthsEs = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key});
@@ -14,13 +23,27 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   final ApiService _apiService = ApiService();
+  final TextEditingController _searchController = TextEditingController();
+
   late Future<List<Event>> _eventsFuture;
+
+  // Filtros activos (opcionales)
+  String _searchQuery = '';
   String _selectedCategory = 'Todos';
+  String _selectedMonth = 'all';
+  String _selectedCity = 'all';
+  String _selectedPriceRange = 'all'; // 'all', 'free', 'under100', 'over100'
 
   @override
   void initState() {
     super.initState();
     _loadEvents();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _loadEvents() {
@@ -29,45 +52,96 @@ class _EventsScreenState extends State<EventsScreen> {
     });
   }
 
+  void _clearAllFilters() {
+    setState(() {
+      _searchController.clear();
+      _searchQuery = '';
+      _selectedCategory = 'Todos';
+      _selectedMonth = 'all';
+      _selectedCity = 'all';
+      _selectedPriceRange = 'all';
+    });
+  }
+
+  int get _activeFiltersCount {
+    int count = 0;
+    if (_searchQuery.trim().isNotEmpty) count++;
+    if (_selectedCategory != 'Todos') count++;
+    if (_selectedMonth != 'all') count++;
+    if (_selectedCity != 'all') count++;
+    if (_selectedPriceRange != 'all') count++;
+    return count;
+  }
+
+  bool get _isFiltered => _activeFiltersCount > 0;
+
+  String _getMonthYearKey(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+
+  String _getMonthYearLabel(DateTime dt) =>
+      '${_monthsEs[dt.month - 1]} ${dt.year}';
+
+  List<Event> _filterEvents(List<Event> events) {
+    return events.where((e) {
+      // 1. Filtro por búsqueda de texto (título, subtítulo, ubicación, categoría)
+      if (_searchQuery.trim().isNotEmpty) {
+        final query = _searchQuery.trim().toLowerCase();
+        final matchTitle = e.title.toLowerCase().contains(query);
+        final matchSubtitle = e.subtitle.toLowerCase().contains(query);
+        final matchLoc = e.location.toLowerCase().contains(query);
+        final matchCat = e.category.toLowerCase().contains(query);
+        if (!matchTitle && !matchSubtitle && !matchLoc && !matchCat) {
+          return false;
+        }
+      }
+
+      // 2. Filtro por categoría
+      if (_selectedCategory != 'Todos' &&
+          e.category.toLowerCase() != _selectedCategory.toLowerCase()) {
+        return false;
+      }
+
+      // 3. Filtro por mes
+      if (_selectedMonth != 'all') {
+        final key = _getMonthYearKey(e.startsAt);
+        if (key != _selectedMonth) return false;
+      }
+
+      // 4. Filtro por ciudad
+      if (_selectedCity != 'all') {
+        if (!e.location.toLowerCase().contains(_selectedCity.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // 5. Filtro por rango de precio
+      if (_selectedPriceRange != 'all') {
+        final minP = e.minPrice;
+        if (_selectedPriceRange == 'free' && minP > 0) return false;
+        if (_selectedPriceRange == 'under100' && minP > 100) return false;
+        if (_selectedPriceRange == 'over100' && minP <= 100) return false;
+      }
+
+      return true;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF181818),
+        backgroundColor: AppColors.bg,
         elevation: 0,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEC3013),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Text(
-                'EVENT',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ),
-            const Text(
-              'HUB',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
+        scrolledUnderElevation: 0,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppColors.border),
         ),
+        title: const EventHubLogo(fontSize: 22),
         actions: [
           IconButton(
-            icon: const Icon(Icons.confirmation_number_outlined, color: Colors.white),
+            icon: const Icon(Icons.confirmation_number_outlined, color: AppColors.fg),
             tooltip: 'Mis Entradas',
             onPressed: () {
               Navigator.push(
@@ -80,15 +154,15 @@ class _EventsScreenState extends State<EventsScreen> {
         ],
       ),
       body: RefreshIndicator(
-        color: const Color(0xFFEC3013),
-        backgroundColor: const Color(0xFF1E1E1E),
+        color: AppColors.accent,
+        backgroundColor: AppColors.bg,
         onRefresh: () async => _loadEvents(),
         child: FutureBuilder<List<Event>>(
           future: _eventsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
-                child: CircularProgressIndicator(color: Color(0xFFEC3013)),
+                child: CircularProgressIndicator(color: AppColors.accent),
               );
             }
 
@@ -99,12 +173,12 @@ class _EventsScreenState extends State<EventsScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.wifi_off_outlined, color: Colors.white38, size: 64),
+                      const Icon(Icons.wifi_off_outlined, color: AppColors.fgLight, size: 56),
                       const SizedBox(height: 16),
                       Text(
                         'No se pudieron cargar los eventos',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.white,
+                              color: AppColors.fg,
                               fontWeight: FontWeight.bold,
                             ),
                         textAlign: TextAlign.center,
@@ -112,17 +186,17 @@ class _EventsScreenState extends State<EventsScreen> {
                       const SizedBox(height: 8),
                       Text(
                         '${snapshot.error}',
-                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                        style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 20),
                       ElevatedButton.icon(
                         onPressed: _loadEvents,
-                        icon: const Icon(Icons.refresh),
+                        icon: const Icon(Icons.refresh, size: 18),
                         label: const Text('Reintentar'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEC3013),
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: AppColors.accentFg,
                         ),
                       ),
                     ],
@@ -137,111 +211,185 @@ class _EventsScreenState extends State<EventsScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.event_busy, color: Colors.white38, size: 64),
+                    Icon(Icons.event_busy, color: AppColors.fgLight, size: 56),
                     SizedBox(height: 16),
                     Text(
                       'No hay eventos programados en este momento.',
-                      style: TextStyle(color: Colors.white70, fontSize: 16),
+                      style: TextStyle(color: AppColors.fgMuted, fontSize: 15),
                     ),
                   ],
                 ),
               );
             }
 
-            // Extraer categorías únicas
-            final categories = ['Todos', ...events.map((e) => e.category).toSet()];
-            final filteredEvents = _selectedCategory == 'Todos'
-                ? events
-                : events.where((e) => e.category == _selectedCategory).toList();
+            // Extraer categorías dinámicas
+            final categorySet = <String>{};
+            for (final e in events) {
+              if (e.category.isNotEmpty) categorySet.add(e.category);
+            }
+            final categories = ['Todos', ...(categorySet.toList()..sort())];
+
+            // Extraer ciudades dinámicas
+            final citySet = <String>{};
+            for (final e in events) {
+              if (e.location.isNotEmpty) {
+                final parts = e.location.split(RegExp(r'[,-]'));
+                final city = parts.last.trim();
+                citySet.add(city.isNotEmpty ? city : e.location);
+              }
+            }
+            final cities = citySet.toList()..sort();
+
+            // Extraer meses dinámicos
+            final Map<String, String> monthTabs = {};
+            for (final e in events) {
+              final key = _getMonthYearKey(e.startsAt);
+              monthTabs[key] = _getMonthYearLabel(e.startsAt);
+            }
+
+            // Aplicar filtros en memoria
+            final filteredEvents = _filterEvents(events);
 
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               children: [
-                // Cabecera promocional
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF241414), Color(0xFF181818)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                // 1. Barra de Búsqueda y Selector de Categorías modularizado
+                EventSearchBar(
+                  controller: _searchController,
+                  searchQuery: _searchQuery,
+                  activeFiltersCount: _activeFiltersCount,
+                  isFiltered: _isFiltered,
+                  onSearchChanged: (val) => setState(() => _searchQuery = val),
+                  onClearSearch: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                  onFilterTap: () {
+                    EventFilterSheet.show(
+                      context,
+                      categories: categories,
+                      monthTabs: monthTabs,
+                      cities: cities,
+                      currentCategory: _selectedCategory,
+                      currentMonth: _selectedMonth,
+                      currentCity: _selectedCity,
+                      currentPriceRange: _selectedPriceRange,
+                      onApply: ({
+                        required category,
+                        required month,
+                        required city,
+                        required priceRange,
+                      }) {
+                        setState(() {
+                          _selectedCategory = category;
+                          _selectedMonth = month;
+                          _selectedCity = city;
+                          _selectedPriceRange = priceRange;
+                        });
+                      },
+                    );
+                  },
+                  categories: categories,
+                  selectedCategory: _selectedCategory,
+                  onCategorySelected: (cat) => setState(() => _selectedCategory = cat),
+                ),
+                const SizedBox(height: 14),
+
+                // 2. Indicador de resultados y acción para limpiar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${filteredEvents.length} evento${filteredEvents.length == 1 ? '' : 's'} encontrado${filteredEvents.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        color: AppColors.fgMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFEC3013).withOpacity(0.3), width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.qr_code_2_outlined, color: Color(0xFFEC3013), size: 40),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                    if (_isFiltered)
+                      GestureDetector(
+                        onTap: _clearAllFilters,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.close, size: 14, color: AppColors.accent),
+                            SizedBox(width: 4),
                             Text(
-                              'Entradas 100% Digitales',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Pagá con QR Simple BNB y llevá tu entrada en tu celular.',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                              'Limpiar filtros',
+                              style: TextStyle(
+                                color: AppColors.accent,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
+                const SizedBox(height: 14),
 
-                // Filtro de categorías
-                SizedBox(
-                  height: 38,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: categories.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final cat = categories[index];
-                      final isSelected = cat == _selectedCategory;
-                      return ChoiceChip(
-                        label: Text(cat),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() => _selectedCategory = cat);
-                          }
-                        },
-                        selectedColor: const Color(0xFFEC3013),
-                        backgroundColor: const Color(0xFF1E1E1E),
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : Colors.white70,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          fontSize: 12,
+                // 3. Listado de Eventos Filtrados o Estado Vacío
+                if (filteredEvents.isEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 20),
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSoft,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.search_off_outlined, color: AppColors.fgLight, size: 56),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No se encontraron eventos',
+                          style: TextStyle(
+                            color: AppColors.fg,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
-                        side: BorderSide(
-                          color: isSelected ? const Color(0xFFEC3013) : const Color(0xFF333333),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Probá buscando con otros términos o restablecé los filtros aplicados.',
+                          style: TextStyle(color: AppColors.fgMuted, fontSize: 13),
+                          textAlign: TextAlign.center,
                         ),
-                      );
-                    },
+                        const SizedBox(height: 18),
+                        ElevatedButton(
+                          onPressed: _clearAllFilters,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: AppColors.accentFg,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            elevation: 0,
+                          ),
+                          child: const Text('Restablecer Filtros'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ...filteredEvents.map(
+                    (event) => EventCard(
+                      event: event,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EventDetailScreen(event: event),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-
-                // Listado de eventos
-                ...filteredEvents.map(
-                  (event) => EventCard(
-                    event: event,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EventDetailScreen(event: event),
-                        ),
-                      );
-                    },
-                  ),
-                ),
               ],
             );
           },

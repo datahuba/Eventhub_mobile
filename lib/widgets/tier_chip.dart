@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 import '../models/event.dart';
 
 class TierSelectorChip extends StatelessWidget {
@@ -21,42 +22,53 @@ class TierSelectorChip extends StatelessWidget {
     return GestureDetector(
       onTap: isExhausted ? null : onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 180),
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFFEC3013).withOpacity(0.12)
-              : const Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.circular(12),
+              ? AppColors.accentSoft
+              : (isExhausted ? AppColors.bgSoft.withValues(alpha: 0.6) : AppColors.bg),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected
-                ? const Color(0xFFEC3013)
-                : (isExhausted ? Colors.white12 : const Color(0xFF333333)),
-            width: isSelected ? 1.8 : 1,
+                ? AppColors.accent
+                : (isExhausted ? AppColors.border.withValues(alpha: 0.5) : AppColors.border),
+            width: isSelected ? 1.6 : 1,
           ),
+          boxShadow: isSelected
+              ? const [
+                  BoxShadow(
+                    color: Color(0x0F000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           children: [
-            // Indicador de selección
+            // Indicador de selección (radio button estilo limpio)
             Container(
               width: 20,
               height: 20,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected ? const Color(0xFFEC3013) : Colors.white38,
+                  color: isSelected
+                      ? AppColors.accent
+                      : (isExhausted ? AppColors.fgLight : AppColors.borderDark),
                   width: 2,
                 ),
-                color: isSelected ? const Color(0xFFEC3013) : Colors.transparent,
+                color: isSelected ? AppColors.accent : Colors.transparent,
               ),
               child: isSelected
-                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  ? const Icon(Icons.check, size: 13, color: Colors.white)
                   : null,
             ),
             const SizedBox(width: 14),
 
-            // Nombre y capacidad
+            // Nombre y capacidad disponible
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,18 +76,19 @@ class TierSelectorChip extends StatelessWidget {
                   Text(
                     tier.name,
                     style: TextStyle(
-                      color: isExhausted ? Colors.white38 : Colors.white,
-                      fontSize: 16,
+                      color: isExhausted ? AppColors.fgLight : AppColors.fg,
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   if (hasCapacity) ...[
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(
-                      isExhausted ? 'Agotado' : '${tier.capacity} cupos disponibles',
+                      isExhausted ? 'Agotado' : '${tier.capacity} entradas disponibles',
                       style: TextStyle(
-                        color: isExhausted ? Colors.redAccent : Colors.white54,
+                        color: isExhausted ? AppColors.error : AppColors.fgMuted,
                         fontSize: 12,
+                        fontWeight: isExhausted ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
                   ],
@@ -87,7 +100,9 @@ class TierSelectorChip extends StatelessWidget {
             Text(
               'Bs. ${tier.price.toStringAsFixed(2)}',
               style: TextStyle(
-                color: isSelected ? const Color(0xFFEC3013) : Colors.white,
+                color: isSelected
+                    ? AppColors.accent
+                    : (isExhausted ? AppColors.fgLight : AppColors.fg),
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),

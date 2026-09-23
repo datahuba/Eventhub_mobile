@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 import '../models/event.dart';
 import '../models/ticket.dart';
 import 'tickets_screen.dart';
@@ -18,7 +19,7 @@ class PaymentSuccessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -30,29 +31,30 @@ class PaymentSuccessScreen extends StatelessWidget {
 
               // Icono de éxito
               Container(
-                width: 90,
-                height: 90,
+                width: 88,
+                height: 88,
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.15),
+                  color: AppColors.successBg,
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.green, width: 2),
+                  border: Border.all(color: AppColors.success, width: 2),
                 ),
-                child: const Icon(Icons.check, color: Colors.green, size: 54),
+                child: const Icon(Icons.check, color: AppColors.success, size: 50),
               ),
               const SizedBox(height: 24),
 
               const Text(
                 '¡Pago Acreditado!',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.fg,
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
+                  letterSpacing: -0.3,
                 ),
               ),
               const SizedBox(height: 8),
               const Text(
                 'Tus entradas han sido generadas y guardadas automáticamente en tu teléfono.',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+                style: TextStyle(color: AppColors.fgMuted, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 30),
@@ -61,27 +63,31 @@ class PaymentSuccessScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF2C2C2C)),
+                  color: AppColors.bgSoft,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
                 ),
                 child: Column(
                   children: [
                     Text(
                       event.title,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        color: AppColors.fg,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
-                    const Divider(color: Color(0xFF2C2C2C), height: 1),
+                    const Divider(color: AppColors.border, height: 1),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Entradas generadas:', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                        const Text('Entradas generadas:', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
                         Text(
                           '${tickets.length} ticket${tickets.length > 1 ? 's' : ''}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -89,10 +95,10 @@ class PaymentSuccessScreen extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Sector:', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                        const Text('Sector:', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
                         Text(
                           tickets.isNotEmpty ? tickets.first.tierName : 'General',
-                          style: const TextStyle(color: Color(0xFFEC3013), fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -101,10 +107,10 @@ class PaymentSuccessScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Voucher BNB:', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                          const Text('Voucher BNB:', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
                           Text(
                             voucherId!,
-                            style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -124,9 +130,9 @@ class PaymentSuccessScreen extends StatelessWidget {
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEC3013),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: AppColors.accentFg,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   minimumSize: const Size(double.infinity, 50),
                   elevation: 0,
@@ -142,12 +148,12 @@ class PaymentSuccessScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              // Botón "Volver al inicio"
+              // Botón "Volver al catálogo"
               TextButton(
                 onPressed: () {
                   Navigator.popUntil(context, (route) => route.isFirst);
                 },
-                child: const Text('Volver al catálogo', style: TextStyle(color: Colors.white54)),
+                child: const Text('Volver al catálogo', style: TextStyle(color: AppColors.fgMuted, fontWeight: FontWeight.w500)),
               ),
               const SizedBox(height: 16),
             ],

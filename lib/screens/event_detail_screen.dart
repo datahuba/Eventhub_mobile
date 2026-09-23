@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 import '../models/event.dart';
 import '../widgets/tier_chip.dart';
 import 'checkout_screen.dart';
@@ -37,7 +38,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Capacidad máxima de ${_selectedTier!.name} alcanzada'),
-          backgroundColor: Colors.redAccent,
+          backgroundColor: AppColors.error,
         ),
       );
       return;
@@ -47,45 +48,174 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
   }
 
+  int _headerPhotoIndex = 0;
+
   void _decrementQuantity() {
     if (_quantity > 1) {
       setState(() => _quantity--);
     }
   }
 
+  void _openFullscreenGallery(BuildContext context, List<String> photos, int initialIndex) {
+    if (photos.isEmpty) return;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: true,
+        pageBuilder: (context, _, __) {
+          int currentIndex = initialIndex;
+          return StatefulBuilder(
+            builder: (context, setModalState) {
+              return Scaffold(
+                backgroundColor: Colors.black.withValues(alpha: 0.95),
+                appBar: AppBar(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  leading: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  title: Text(
+                    '${currentIndex + 1} de ${photos.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  centerTitle: true,
+                ),
+                body: PageView.builder(
+                  itemCount: photos.length,
+                  controller: PageController(initialPage: initialIndex),
+                  onPageChanged: (index) {
+                    setModalState(() {
+                      currentIndex = index;
+                    });
+                  },
+                  itemBuilder: (context, index) {
+                    return Center(
+                      child: InteractiveViewer(
+                        clipBehavior: Clip.none,
+                        minScale: 0.8,
+                        maxScale: 4.0,
+                        child: Image.network(
+                          photos[index],
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final event = widget.event;
+    final photos = event.allPhotos;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.bg,
       body: CustomScrollView(
         slivers: [
-          // Imagen Hero con botón atrás
+          // Imagen Hero con botón atrás y soporte multicarrusel si hay varias fotos
           SliverAppBar(
             expandedHeight: 260,
             pinned: true,
-            backgroundColor: const Color(0xFF181818),
-            leading: CircleAvatar(
-              backgroundColor: Colors.black54,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
+            backgroundColor: AppColors.bg,
+            leading: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: CircleAvatar(
+                backgroundColor: Colors.white.withValues(alpha: 0.9),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: AppColors.fg, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              background: event.heroImage.isNotEmpty
-                  ? Image.network(
-                      event.heroImage,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: const Color(0xFF252525),
-                        child: const Icon(Icons.broken_image, color: Colors.white38, size: 60),
-                      ),
+              background: photos.isNotEmpty
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        GestureDetector(
+                          onTap: () => _openFullscreenGallery(context, photos, _headerPhotoIndex),
+                          child: PageView.builder(
+                            itemCount: photos.length,
+                            onPageChanged: (index) {
+                              setState(() {
+                                _headerPhotoIndex = index;
+                              });
+                            },
+                            itemBuilder: (context, index) {
+                              return Image.network(
+                                photos[index],
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: AppColors.bgSoft,
+                                  child: const Icon(Icons.broken_image, color: AppColors.fgLight, size: 56),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        // Gradiente inferior para legibilidad del contenido
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: 60,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.6),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Indicador de foto actual si hay más de 1
+                        if (photos.length > 1)
+                          Positioned(
+                            bottom: 12,
+                            right: 16,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.photo_library, color: Colors.white, size: 13),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    '${_headerPhotoIndex + 1} / ${photos.length}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     )
                   : Container(
-                      color: const Color(0xFF252525),
-                      child: const Icon(Icons.event, color: Colors.white38, size: 60),
+                      color: AppColors.bgSoft,
+                      child: const Icon(Icons.event, color: AppColors.fgLight, size: 56),
                     ),
             ),
           ),
@@ -101,14 +231,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEC3013).withOpacity(0.2),
+                      color: AppColors.accentSoft,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFFEC3013), width: 0.8),
+                      border: Border.all(color: AppColors.accent.withValues(alpha: 0.3), width: 1),
                     ),
                     child: Text(
                       event.category.toUpperCase(),
                       style: const TextStyle(
-                        color: Color(0xFFEC3013),
+                        color: AppColors.accent,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.8,
@@ -121,7 +251,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   Text(
                     event.title,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.fg,
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       height: 1.2,
@@ -131,24 +261,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     const SizedBox(height: 6),
                     Text(
                       event.subtitle,
-                      style: const TextStyle(color: Colors.white70, fontSize: 15),
+                      style: const TextStyle(color: AppColors.fgMuted, fontSize: 15),
                     ),
                   ],
                   const SizedBox(height: 20),
 
-                  // Info pills: Fecha y Ubicación
+                  // Info card: Fecha y Ubicación
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E),
+                      color: AppColors.bgSoft,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF2A2A2A)),
+                      border: Border.all(color: AppColors.border),
                     ),
                     child: Column(
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.calendar_today_outlined, color: Color(0xFFEC3013), size: 20),
+                            const Icon(Icons.calendar_today_outlined, color: AppColors.accent, size: 20),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -156,12 +286,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                 children: [
                                   Text(
                                     event.formattedDate,
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold),
                                   ),
                                   if (event.time.isNotEmpty)
                                     Text(
                                       'Hora: ${event.time}',
-                                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                      style: const TextStyle(color: AppColors.fgMuted, fontSize: 12),
                                     ),
                                 ],
                               ),
@@ -170,11 +300,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                         ),
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Divider(color: Color(0xFF2A2A2A), height: 1),
+                          child: Divider(color: AppColors.border, height: 1),
                         ),
                         Row(
                           children: [
-                            const Icon(Icons.location_on_outlined, color: Color(0xFFEC3013), size: 20),
+                            const Icon(Icons.location_on_outlined, color: AppColors.accent, size: 20),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -182,12 +312,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                 children: [
                                   Text(
                                     event.location.isNotEmpty ? event.location : 'Por confirmar',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold),
                                   ),
                                   if (event.address.isNotEmpty)
                                     Text(
                                       event.address,
-                                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                      style: const TextStyle(color: AppColors.fgMuted, fontSize: 12),
                                     ),
                                 ],
                               ),
@@ -203,7 +333,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   if (event.description.isNotEmpty) ...[
                     const Text(
                       'Acerca de este evento',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: AppColors.fg, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 10),
                     ...event.description.map(
@@ -211,8 +341,69 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
                           p,
-                          style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+                          style: const TextStyle(color: AppColors.fg, fontSize: 14, height: 1.5),
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Galería de fotos del evento
+                  if (photos.isNotEmpty) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Fotos del evento',
+                          style: TextStyle(color: AppColors.fg, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '${photos.length} foto${photos.length > 1 ? 's' : ''}',
+                          style: const TextStyle(color: AppColors.fgMuted, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 130,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: photos.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) {
+                          final photoUrl = photos[index];
+                          return GestureDetector(
+                            onTap: () => _openFullscreenGallery(context, photos, index),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Stack(
+                                children: [
+                                  AspectRatio(
+                                    aspectRatio: 16 / 10,
+                                    child: Image.network(
+                                      photoUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => Container(
+                                        color: AppColors.bgSoft,
+                                        width: 150,
+                                        child: const Icon(Icons.broken_image, color: AppColors.fgLight),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned.fill(
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap: () => _openFullscreenGallery(context, photos, index),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -221,14 +412,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   // Selección de Sectores (Tiers)
                   const Text(
                     'Seleccioná tu sector',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: AppColors.fg, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
 
                   if (event.tiers.isEmpty)
                     const Text(
                       'No hay sectores configurados para este evento.',
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: AppColors.fgMuted),
                     )
                   else
                     ...event.tiers.map(
@@ -250,30 +441,30 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E),
+                        color: AppColors.bgSoft,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF2A2A2A)),
+                        border: Border.all(color: AppColors.border),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
                             'Cantidad de entradas',
-                            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                            style: TextStyle(color: AppColors.fg, fontSize: 15, fontWeight: FontWeight.w600),
                           ),
                           Row(
                             children: [
                               IconButton(
                                 onPressed: _decrementQuantity,
-                                icon: const Icon(Icons.remove_circle_outline, color: Colors.white70),
+                                icon: const Icon(Icons.remove_circle_outline, color: AppColors.fgMuted),
                               ),
                               Text(
                                 '$_quantity',
-                                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                style: const TextStyle(color: AppColors.fg, fontSize: 18, fontWeight: FontWeight.bold),
                               ),
                               IconButton(
                                 onPressed: _incrementQuantity,
-                                icon: const Icon(Icons.add_circle_outline, color: Color(0xFFEC3013)),
+                                icon: const Icon(Icons.add_circle_outline, color: AppColors.accent),
                               ),
                             ],
                           ),
@@ -293,8 +484,15 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       bottomSheet: Container(
         padding: const EdgeInsets.all(16),
         decoration: const BoxDecoration(
-          color: Color(0xFF181818),
-          border: Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 1)),
+          color: AppColors.bg,
+          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 10,
+              offset: Offset(0, -2),
+            ),
+          ],
         ),
         child: SafeArea(
           child: Row(
@@ -303,11 +501,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Total a pagar', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  const Text('Total a pagar', style: TextStyle(color: AppColors.fgMuted, fontSize: 12)),
                   Text(
                     'Bs. ${_totalPrice.toStringAsFixed(2)}',
                     style: const TextStyle(
-                      color: Color(0xFFEC3013),
+                      color: AppColors.accent,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
@@ -332,16 +530,16 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                           );
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEC3013),
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.white12,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: AppColors.accent,
+                    foregroundColor: AppColors.accentFg,
+                    disabledBackgroundColor: AppColors.border,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     elevation: 0,
                   ),
                   child: const Text(
                     'Comprar Entradas',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
               ),

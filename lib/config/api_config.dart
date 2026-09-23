@@ -39,6 +39,32 @@ class ApiConfig {
     }
   }
 
+  /// Retorna el host raíz del backend (sin /api)
+  static String get backendHost {
+    final base = baseUrl;
+    if (base.endsWith('/api')) {
+      return base.substring(0, base.length - 4);
+    }
+    return base;
+  }
+
+  /// Retorna la URL base del frontend web (puerto 5173 por defecto)
+  static String get webBaseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:5173';
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'http://10.0.2.2:5173';
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+      case TargetPlatform.linux:
+      default:
+        return 'http://localhost:5173';
+    }
+  }
+
   // Endpoints del backend
   static String get eventsEndpoint => '$baseUrl/events';
   static String eventDetailEndpoint(String id) => '$baseUrl/events/$id';
