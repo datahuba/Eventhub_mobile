@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../models/event.dart';
@@ -95,10 +96,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                         clipBehavior: Clip.none,
                         minScale: 0.8,
                         maxScale: 4.0,
-                        child: Image.network(
-                          photos[index],
+                        child: CachedNetworkImage(
+                          imageUrl: photos[index],
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Center(
+                          placeholder: (context, url) => const Center(
+                            child: CircularProgressIndicator(color: AppColors.accent),
+                          ),
+                          errorWidget: (_, __, ___) => const Center(
                             child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
                           ),
                         ),
@@ -153,10 +157,16 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                               });
                             },
                             itemBuilder: (context, index) {
-                              return Image.network(
-                                photos[index],
+                              return CachedNetworkImage(
+                                imageUrl: photos[index],
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
+                                placeholder: (context, url) => Container(
+                                  color: AppColors.bgSoft,
+                                  child: const Center(
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
                                   color: AppColors.bgSoft,
                                   child: const Icon(Icons.broken_image, color: AppColors.fgLight, size: 56),
                                 ),
@@ -381,10 +391,21 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                 children: [
                                   AspectRatio(
                                     aspectRatio: 16 / 10,
-                                    child: Image.network(
-                                      photoUrl,
+                                    child: CachedNetworkImage(
+                                      imageUrl: photoUrl,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) => Container(
+                                      placeholder: (context, url) => Container(
+                                        color: AppColors.bgSoft,
+                                        width: 150,
+                                        child: const Center(
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) => Container(
                                         color: AppColors.bgSoft,
                                         width: 150,
                                         child: const Icon(Icons.broken_image, color: AppColors.fgLight),

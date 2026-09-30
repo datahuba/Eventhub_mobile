@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../models/event.dart';
@@ -44,10 +45,20 @@ class EventCard extends StatelessWidget {
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
                       child: event.displayHeroImage.isNotEmpty
-                          ? Image.network(
-                              event.displayHeroImage,
+                          ? CachedNetworkImage(
+                              imageUrl: event.displayHeroImage,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
+                              placeholder: (context, url) => Container(
+                                color: AppColors.bgSoft,
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => Container(
                                 color: AppColors.bgSoft,
                                 child: const Icon(Icons.broken_image, color: AppColors.fgLight, size: 44),
                               ),
