@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 import '../models/event.dart';
 import '../models/order.dart';
 import '../models/attendee.dart';
@@ -158,7 +159,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('El código QR ha expirado en el banco. Generá una nueva orden.'),
-              backgroundColor: Colors.orangeAccent,
+              backgroundColor: AppColors.warning,
             ),
           );
         }
@@ -168,7 +169,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Aún no detectamos la transferencia en el banco. Si ya pagaste, esperá unos segundos.'),
-              backgroundColor: Colors.white24,
+              backgroundColor: AppColors.fg,
               duration: Duration(seconds: 3),
             ),
           );
@@ -179,7 +180,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al consultar: ${e.toString().replaceAll("Exception: ", "")}'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: AppColors.error,
           ),
         );
       }
@@ -193,38 +194,47 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF181818),
+        backgroundColor: AppColors.bg,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppColors.border),
+        ),
         title: const Text(
           'Pago con QR Simple BNB',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
+          icon: const Icon(Icons.close, color: AppColors.fg),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // Banner explicativo
+          // Banner explicativo seguro
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A2A1A),
+              color: AppColors.successBg,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.green.withOpacity(0.4)),
+              border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.lock_outline, color: Colors.greenAccent, size: 20),
+                const Icon(Icons.lock_outline, color: AppColors.success, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Pago seguro acreditado directamente por la Red BNB / Banco Central',
-                    style: TextStyle(color: Colors.greenAccent.shade100, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.success.withValues(alpha: 0.9),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -236,19 +246,20 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           Center(
             child: Column(
               children: [
-                const Text('Monto total a transferir', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                const Text('Monto total a transferir', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
                 const SizedBox(height: 4),
                 Text(
                   'Bs. ${widget.bnbResponse.totalAmount.toStringAsFixed(2)}',
                   style: const TextStyle(
-                    color: Color(0xFFEC3013),
+                    color: AppColors.accent,
                     fontSize: 34,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   '${widget.bnbResponse.eventTitle} • ${widget.selectedTier.name} (${widget.attendees.length} entrada${widget.attendees.length > 1 ? 's' : ''})',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -256,42 +267,46 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Contenedor blanco con el Código QR Simple de BNB
+          // Contenedor con el Código QR Simple de BNB
           Center(
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border, width: 1.5),
+                boxShadow: const [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Color(0x0C000000),
                     blurRadius: 16,
-                    offset: const Offset(0, 6),
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
               child: Column(
                 children: [
                   if (_qrBytes != null)
-                    Image.memory(
-                      _qrBytes!,
-                      width: 240,
-                      height: 240,
-                      fit: BoxFit.contain,
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.memory(
+                        _qrBytes!,
+                        width: 240,
+                        height: 240,
+                        fit: BoxFit.contain,
+                      ),
                     )
                   else
                     const SizedBox(
                       width: 240,
                       height: 240,
                       child: Center(
-                        child: CircularProgressIndicator(color: Color(0xFFEC3013)),
+                        child: CircularProgressIndicator(color: AppColors.accent),
                       ),
                     ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   const Text(
                     'Escaneá con cualquier app bancaria',
-                    style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12),
+                    style: TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ],
               ),
@@ -301,32 +316,44 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
 
           // Contador de expiración
           Center(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.timer_outlined, color: Colors.white54, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  'Tiempo restante: $_formattedTimeRemaining',
-                  style: TextStyle(
-                    color: _secondsRemaining < 120 ? Colors.redAccent : Colors.white70,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.bgSoft,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.timer_outlined,
+                    color: _secondsRemaining < 120 ? AppColors.error : AppColors.fgMuted,
+                    size: 16,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Text(
+                    'Tiempo restante: $_formattedTimeRemaining',
+                    style: TextStyle(
+                      color: _secondsRemaining < 120 ? AppColors.error : AppColors.fg,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 28),
 
           // Botón Principal: "Ya realicé el pago"
           ElevatedButton(
             onPressed: _isChecking ? null : () => _verifyPayment(isManual: true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEC3013),
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.white12,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              backgroundColor: AppColors.accent,
+              foregroundColor: AppColors.accentFg,
+              disabledBackgroundColor: AppColors.border,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               padding: const EdgeInsets.symmetric(vertical: 16),
               elevation: 0,
             ),
@@ -346,11 +373,11 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
                 : const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle_outline, size: 22),
+                      Icon(Icons.check_circle_outline, size: 20),
                       SizedBox(width: 8),
                       Text(
                         'Ya realicé el pago',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -361,7 +388,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           const Center(
             child: Text(
               'La aplicación verifica automáticamente cada 4 segundos.',
-              style: TextStyle(color: Colors.white38, fontSize: 11),
+              style: TextStyle(color: AppColors.fgMuted, fontSize: 12),
             ),
           ),
           const SizedBox(height: 24),

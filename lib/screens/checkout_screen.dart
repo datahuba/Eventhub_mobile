@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 import '../models/event.dart';
 import '../models/attendee.dart';
 import '../services/api_service.dart';
@@ -105,7 +106,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
-          backgroundColor: Colors.redAccent,
+          backgroundColor: AppColors.error,
         ),
       );
     }
@@ -114,16 +115,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF181818),
+        backgroundColor: AppColors.bg,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: AppColors.border),
+        ),
         title: const Text(
           'Registro de Entradas',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: AppColors.fg),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -136,16 +142,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
+                color: AppColors.bgSoft,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF2C2C2C)),
+                border: Border.all(color: AppColors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     widget.event.title,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -153,14 +159,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     children: [
                       Text(
                         '${widget.selectedTier.name} x ${widget.quantity}',
-                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        style: const TextStyle(color: AppColors.fgMuted, fontSize: 14),
                       ),
                       Text(
                         'Bs. ${_totalPrice.toStringAsFixed(2)}',
                         style: const TextStyle(
-                          color: Color(0xFFEC3013),
+                          color: AppColors.accent,
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 17,
                         ),
                       ),
                     ],
@@ -173,13 +179,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             // Sección 1: Datos del Comprador
             const Text(
               'Datos del Comprador',
-              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+              style: TextStyle(color: AppColors.fg, fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
             TextFormField(
               controller: _buyerNameController,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppColors.fg),
               decoration: _inputDecoration('Nombre y Apellido completo *', Icons.person_outline),
               validator: (val) => (val == null || val.trim().isEmpty) ? 'Ingresá tu nombre completo' : null,
             ),
@@ -188,7 +194,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             TextFormField(
               controller: _buyerPhoneController,
               keyboardType: TextInputType.phone,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppColors.fg),
               decoration: _inputDecoration('Celular / WhatsApp (opcional)', Icons.phone_outlined),
             ),
             const SizedBox(height: 12),
@@ -196,7 +202,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             TextFormField(
               controller: _buyerEmailController,
               keyboardType: TextInputType.emailAddress,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppColors.fg),
               decoration: _inputDecoration('Correo electrónico (opcional)', Icons.email_outlined),
             ),
             const SizedBox(height: 28),
@@ -204,12 +210,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             // Sección 2: Asistentes Nominales
             const Text(
               'Titulares de las Entradas',
-              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+              style: TextStyle(color: AppColors.fg, fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
             const Text(
               'El Carnet de Identidad (C.I.) es requerido para la validación en puerta.',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+              style: TextStyle(color: AppColors.fgMuted, fontSize: 12),
             ),
             const SizedBox(height: 16),
 
@@ -218,9 +224,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF181818),
+                  color: AppColors.bg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF282828)),
+                  border: Border.all(color: AppColors.border),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x06000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,25 +243,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEC3013).withOpacity(0.15),
+                            color: AppColors.accentSoft,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             'Entrada ${index + 1}',
-                            style: const TextStyle(color: Color(0xFFEC3013), fontSize: 12, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           widget.selectedTier.name,
-                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                          style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _attendeeNameControllers[index],
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: AppColors.fg),
                       decoration: _inputDecoration('Nombre del Asistente *', Icons.badge_outlined),
                       validator: (val) => (val == null || val.trim().isEmpty) ? 'Ingresá el nombre' : null,
                     ),
@@ -256,7 +269,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     TextFormField(
                       controller: _attendeeCiControllers[index],
                       keyboardType: TextInputType.text,
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: AppColors.fg),
                       decoration: _inputDecoration('C.I. / Documento de Identidad *', Icons.credit_card_outlined),
                       validator: (val) => (val == null || val.trim().isEmpty) ? 'Ingresá el C.I.' : null,
                     ),
@@ -271,9 +284,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ElevatedButton(
               onPressed: _isLoading ? null : _submitOrder,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEC3013),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                backgroundColor: AppColors.accent,
+                foregroundColor: AppColors.accentFg,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 elevation: 0,
               ),
@@ -298,21 +311,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   InputDecoration _inputDecoration(String hint, IconData icon) {
     return InputDecoration(
       labelText: hint,
-      labelStyle: const TextStyle(color: Colors.white54, fontSize: 14),
-      prefixIcon: Icon(icon, color: Colors.white38, size: 20),
+      labelStyle: const TextStyle(color: AppColors.fgMuted, fontSize: 14),
+      prefixIcon: Icon(icon, color: AppColors.fgMuted, size: 20),
       filled: true,
-      fillColor: const Color(0xFF222222),
+      fillColor: AppColors.bgSoft,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFF333333)),
+        borderSide: const BorderSide(color: AppColors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFF333333)),
+        borderSide: const BorderSide(color: AppColors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFEC3013), width: 1.5),
+        borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );

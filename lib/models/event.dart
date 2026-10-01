@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import '../config/api_config.dart';
 
 class TicketTier {
   final String name;
@@ -92,6 +93,61 @@ class Event {
     } catch (_) {
       return '${startsAt.day}/${startsAt.month}';
     }
+  }
+
+  /// Normaliza URLs relativas (/images/...) a URLs absolutas alcanzables por la app
+  static String resolveUrl(String? rawUrl) {
+    if (rawUrl == null) return '';
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) {
+      if (trimmed.startsWith('/images/')) {
+        return '${ApiConfig.webBaseUrl}$trimmed';
+      }
+      return '${ApiConfig.backendHost}$trimmed';
+    }
+    return trimmed;
+  }
+
+  /// Retorna la imagen de cabecera normalizada o la primera foto de la galería como fallback
+  String get displayHeroImage {
+    final resolvedHero = resolveUrl(heroImage);
+    if (resolvedHero.isNotEmpty) return resolvedHero;
+    for (final img in images) {
+      final resolved = resolveUrl(img);
+      if (resolved.isNotEmpty) return resolved;
+    }
+    return '';
+  }
+
+  /// Retorna la lista de fotos de la galería normalizadas
+  List<String> get displayImages {
+    final list = <String>[];
+    for (final img in images) {
+      final resolved = resolveUrl(img);
+      if (resolved.isNotEmpty && !list.contains(resolved)) {
+        list.add(resolved);
+      }
+    }
+    return list;
+  }
+
+  /// Retorna todas las fotos del evento (Hero + Galería) sin duplicados
+  List<String> get allPhotos {
+    final list = <String>[];
+    final hero = displayHeroImage;
+    if (hero.isNotEmpty) {
+      list.add(hero);
+    }
+    for (final img in displayImages) {
+      if (!list.contains(img)) {
+        list.add(img);
+      }
+    }
+    return list;
   }
 
   factory Event.fromJson(Map<String, dynamic> json) {
