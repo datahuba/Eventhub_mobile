@@ -2,19 +2,51 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 
 class EventsEmptyState extends StatelessWidget {
-  final bool isPastTab;
+  final int selectedTab;
   final bool isFiltered;
   final VoidCallback onClearFilters;
 
   const EventsEmptyState({
     super.key,
-    required this.isPastTab,
+    required this.selectedTab,
     required this.isFiltered,
     required this.onClearFilters,
   });
 
   @override
   Widget build(BuildContext context) {
+    IconData icon;
+    String title;
+    String description;
+
+    switch (selectedTab) {
+      case 1:
+        icon = Icons.history_toggle_off;
+        title = 'Sin eventos concluidos';
+        description = 'Los eventos que ya finalizaron se archivarán automáticamente en esta sección.';
+        break;
+      case 2:
+        icon = Icons.confirmation_number_outlined;
+        title = 'No hay eventos agotados';
+        description = 'Los eventos que hayan vendido todas sus entradas aparecerán acá.';
+        break;
+      case 3:
+        icon = Icons.event_busy_outlined;
+        title = 'No se encontraron eventos';
+        description = isFiltered
+            ? 'Probá buscando con otros términos o restablecé los filtros aplicados.'
+            : 'No hay eventos registrados en el catálogo.';
+        break;
+      case 0:
+      default:
+        icon = Icons.event_available_outlined;
+        title = 'No hay eventos activos en cartelera';
+        description = isFiltered
+            ? 'Probá buscando con otros términos o restablecé los filtros aplicados.'
+            : 'Los próximos eventos programados aparecerán acá.';
+        break;
+    }
+
     return Container(
       margin: const EdgeInsets.only(top: 20),
       padding: const EdgeInsets.all(28),
@@ -26,16 +58,10 @@ class EventsEmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            isPastTab ? Icons.history_toggle_off : Icons.event_available_outlined,
-            color: AppColors.fgLight,
-            size: 56,
-          ),
+          Icon(icon, color: AppColors.fgLight, size: 56),
           const SizedBox(height: 16),
           Text(
-            isPastTab
-                ? 'Sin eventos pasados registrados'
-                : 'No hay eventos activos en cartelera',
+            title,
             style: const TextStyle(
               color: AppColors.fg,
               fontWeight: FontWeight.bold,
@@ -45,11 +71,7 @@ class EventsEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            isPastTab
-                ? 'Los eventos que ya concluyeron se archivarán automáticamente en esta sección.'
-                : (isFiltered
-                    ? 'Probá buscando con otros términos o restablecé los filtros aplicados.'
-                    : 'Los próximos eventos programados aparecerán acá.'),
+            description,
             style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
             textAlign: TextAlign.center,
           ),

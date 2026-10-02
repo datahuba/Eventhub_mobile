@@ -59,6 +59,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
   void _clearAllFilters() {
     setState(() {
+      _selectedEventTab = 0;
       _searchController.clear();
       _searchQuery = '';
       _selectedCategory = 'Todos';
@@ -70,6 +71,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
   int get _activeFiltersCount {
     int count = 0;
+    if (_selectedEventTab != 0) count++;
     if (_searchQuery.trim().isNotEmpty) count++;
     if (_selectedCategory != 'Todos') count++;
     if (_selectedMonth != 'all') count++;
@@ -300,12 +302,29 @@ class _EventsScreenState extends State<EventsScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // 2. Selector de Pestañas: [ En Cartelera ] vs [ Pasados ]
+                // 2. Selector de Pestañas: [ En Cartelera ] [ Concluidos ] [ Agotados ] [ Todos los Eventos ]
                 Builder(
                   builder: (context) {
-                    final activeEvents = filteredEvents.where((e) => !e.isPast).toList();
-                    final pastEvents = filteredEvents.where((e) => e.isPast).toList();
-                    final currentTabEvents = _selectedEventTab == 0 ? activeEvents : pastEvents;
+                    final activeEvents = filteredEvents.where((e) => !e.isPast && !e.isSoldOut).toList();
+                    final concludedEvents = filteredEvents.where((e) => e.isPast).toList();
+                    final soldOutEvents = filteredEvents.where((e) => e.isSoldOut && !e.isPast).toList();
+                    final allEvents = filteredEvents;
+
+                    final currentTabEvents = _selectedEventTab == 0
+                        ? activeEvents
+                        : _selectedEventTab == 1
+                            ? concludedEvents
+                            : _selectedEventTab == 2
+                                ? soldOutEvents
+                                : allEvents;
+
+                    final tabSuffix = _selectedEventTab == 0
+                        ? 'activo'
+                        : _selectedEventTab == 1
+                            ? 'concluido'
+                            : _selectedEventTab == 2
+                                ? 'agotado'
+                                : 'en total';
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +332,9 @@ class _EventsScreenState extends State<EventsScreen> {
                         EventStatusTabBar(
                           selectedTab: _selectedEventTab,
                           activeCount: activeEvents.length,
-                          pastCount: pastEvents.length,
+                          concludedCount: concludedEvents.length,
+                          soldOutCount: soldOutEvents.length,
+                          allCount: allEvents.length,
                           onTabChanged: (index) => setState(() => _selectedEventTab = index),
                         ),
 
@@ -322,7 +343,7 @@ class _EventsScreenState extends State<EventsScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '${currentTabEvents.length} evento${currentTabEvents.length == 1 ? '' : 's'} ${_selectedEventTab == 0 ? 'activo' : 'archivado'}${currentTabEvents.length == 1 ? '' : 's'}',
+                              '${currentTabEvents.length} evento${currentTabEvents.length == 1 ? '' : 's'} $tabSuffix${currentTabEvents.length == 1 ? '' : 's'}',
                               style: const TextStyle(
                                 color: AppColors.fgMuted,
                                 fontSize: 13,
@@ -355,7 +376,7 @@ class _EventsScreenState extends State<EventsScreen> {
                         // 4. Listado de Eventos de la Pestaña o Estado Vacío (modularizado)
                         if (currentTabEvents.isEmpty)
                           EventsEmptyState(
-                            isPastTab: _selectedEventTab == 1,
+                            selectedTab: _selectedEventTab,
                             isFiltered: _isFiltered,
                             onClearFilters: _clearAllFilters,
                           )
