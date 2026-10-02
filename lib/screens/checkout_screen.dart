@@ -62,6 +62,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   double get _totalPrice => widget.selectedTier.price * widget.quantity;
 
   Future<void> _submitOrder() async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) {
       return;
     }

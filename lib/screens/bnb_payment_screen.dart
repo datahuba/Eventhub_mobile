@@ -94,8 +94,9 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   Future<void> _verifyPayment({bool isManual = true}) async {
     if (_isChecking) return;
 
-    if (isManual) {
-      setState(() => _isChecking = true);
+    _isChecking = true;
+    if (isManual && mounted) {
+      setState(() {});
     }
 
     try {
@@ -132,6 +133,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
               imageUrl: raw != null ? raw['imageUrl']?.toString() : null,
               voucherId: statusResp.voucherId,
               purchasedAt: DateTime.now(),
+              eventStartsAt: widget.event.startsAt,
             ),
           );
         }
@@ -185,8 +187,9 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         );
       }
     } finally {
+      _isChecking = false;
       if (isManual && mounted) {
-        setState(() => _isChecking = false);
+        setState(() {});
       }
     }
   }

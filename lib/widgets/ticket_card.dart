@@ -7,13 +7,57 @@ import '../services/wallet_pass_service.dart';
 import 'wallet_button.dart';
 
 /// Tarjeta de entrada digital con diseño físico de pase (corte perforado, QR criptográfico y botones Wallet).
-class TicketCard extends StatelessWidget {
+class TicketCard extends StatefulWidget {
   final IssuedTicket ticket;
 
   const TicketCard({
     super.key,
     required this.ticket,
   });
+
+  @override
+  State<TicketCard> createState() => _TicketCardState();
+}
+
+class _TicketCardState extends State<TicketCard> {
+  IssuedTicket get ticket => widget.ticket;
+  bool _isProcessingWallet = false;
+
+  Future<void> _handleAppleWallet() async {
+    if (_isProcessingWallet) return;
+    setState(() => _isProcessingWallet = true);
+    try {
+      final ok = await WalletPassService.addToAppleWallet(ticket);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Generando pase Apple Wallet (.pkpass)...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessingWallet = false);
+    }
+  }
+
+  Future<void> _handleGoogleWallet() async {
+    if (_isProcessingWallet) return;
+    setState(() => _isProcessingWallet = true);
+    try {
+      final ok = await WalletPassService.addToGoogleWallet(ticket);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vinculando con Google Wallet...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessingWallet = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -229,31 +273,11 @@ class TicketCard extends StatelessWidget {
                 // Botón de integración con Billetera Nativa (Apple Wallet o Google Wallet)
                 if (defaultTargetPlatform == TargetPlatform.iOS)
                   AppleWalletButton(
-                    onPressed: () async {
-                      final ok = await WalletPassService.addToAppleWallet(ticket);
-                      if (!ok && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Generando pase Apple Wallet (.pkpass)...'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      }
-                    },
+                    onPressed: _isProcessingWallet ? null : _handleAppleWallet,
                   )
                 else
                   GoogleWalletButton(
-                    onPressed: () async {
-                      final ok = await WalletPassService.addToGoogleWallet(ticket);
-                      if (!ok && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Vinculando con Google Wallet...'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      }
-                    },
+                    onPressed: _isProcessingWallet ? null : _handleGoogleWallet,
                   ),
               ],
             ),

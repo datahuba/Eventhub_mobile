@@ -10,14 +10,33 @@ class ApiService {
 
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
+  dynamic _safeJsonDecode(String body) {
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      throw Exception('El servidor no respondió con el formato JSON esperado');
+    }
+  }
+
   /// Obtiene la cartelera completa de eventos activos desde GET /api/events
   Future<List<Event>> getEvents() async {
     try {
       final uri = Uri.parse(ApiConfig.eventsEndpoint);
       final response = await _client.get(uri).timeout(const Duration(seconds: 10));
 
+      if (response.statusCode >= 500) {
+        throw Exception('Servidor temporalmente no disponible (HTTP ${response.statusCode})');
+      }
+
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final contentType = response.headers['content-type'] ?? '';
+        if (!contentType.contains('application/json')) {
+          throw Exception('Respuesta inesperada del servidor');
+        }
+        final dynamic data = _safeJsonDecode(response.body);
+        if (data is! List) {
+          throw Exception('Formato de datos de eventos no válido');
+        }
         return data.map((json) => Event.fromJson(json as Map<String, dynamic>)).toList();
       } else {
         throw Exception('Error al cargar eventos (Código: ${response.statusCode})');
@@ -33,9 +52,20 @@ class ApiService {
       final uri = Uri.parse(ApiConfig.eventDetailEndpoint(id));
       final response = await _client.get(uri).timeout(const Duration(seconds: 10));
 
+      if (response.statusCode >= 500) {
+        throw Exception('Servidor temporalmente no disponible (HTTP ${response.statusCode})');
+      }
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return Event.fromJson(data as Map<String, dynamic>);
+        final contentType = response.headers['content-type'] ?? '';
+        if (!contentType.contains('application/json')) {
+          throw Exception('Respuesta inesperada del servidor');
+        }
+        final dynamic data = _safeJsonDecode(response.body);
+        if (data is! Map<String, dynamic>) {
+          throw Exception('Detalle del evento no válido');
+        }
+        return Event.fromJson(data);
       } else {
         throw Exception('Evento no encontrado (Código: ${response.statusCode})');
       }
@@ -70,13 +100,17 @@ class ApiService {
         body: body,
       ).timeout(const Duration(seconds: 20));
 
-      final data = jsonDecode(response.body);
+      if (response.statusCode >= 500) {
+        throw Exception('El servidor de pagos está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+      }
 
-      if (response.statusCode == 200 && data['success'] == true) {
-        return BnbQrResponse.fromJson(data as Map<String, dynamic>);
+      final dynamic decoded = _safeJsonDecode(response.body);
+
+      if (response.statusCode == 200 && decoded is Map<String, dynamic> && decoded['success'] == true) {
+        return BnbQrResponse.fromJson(decoded);
       } else {
-        final errorMsg = data['error'] ?? 'Error al generar el QR de pago';
-        throw Exception(errorMsg);
+        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'Error al generar el QR de pago';
+        throw Exception(errorMsg ?? 'Error al generar el QR de pago');
       }
     } catch (e) {
       throw Exception('Error en pasarela BNB: $e');
@@ -101,13 +135,17 @@ class ApiService {
         body: body,
       ).timeout(const Duration(seconds: 15));
 
-      final data = jsonDecode(response.body);
+      if (response.statusCode >= 500) {
+        throw Exception('El servidor está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+      }
 
-      if (response.statusCode == 200) {
-        return BnbStatusResponse.fromJson(data as Map<String, dynamic>);
+      final dynamic decoded = _safeJsonDecode(response.body);
+
+      if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
+        return BnbStatusResponse.fromJson(decoded);
       } else {
-        final errorMsg = data['error'] ?? 'Error al verificar el estado del pago';
-        throw Exception(errorMsg);
+        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'Error al verificar el estado del pago';
+        throw Exception(errorMsg ?? 'Error al verificar el estado del pago');
       }
     } catch (e) {
       throw Exception('Error al verificar pago: $e');

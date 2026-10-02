@@ -9,7 +9,7 @@
 .history
 .svn/
 # Environment variables
-.env
+.env*
 !.env.example
 
 migrate_working_dir/

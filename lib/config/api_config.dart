@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 class ApiConfig {
   // IP o host configurable manualmente para pruebas en celulares físicos
   static String? _customHost;
@@ -22,21 +20,8 @@ class ApiConfig {
       return envUrl;
     }
 
-    if (kIsWeb) {
-      return 'http://localhost:4000/api';
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        // 10.0.2.2 es el alias del host en el emulador estándar de Android
-        return 'http://10.0.2.2:4000/api';
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.windows:
-      case TargetPlatform.linux:
-      default:
-        return 'http://localhost:4000/api';
-    }
+    // URL oficial de producción en el VPS de DataHub
+    return 'https://api-eventhub.datahuba.com/api';
   }
 
   /// Retorna el host raíz del backend (sin /api)
@@ -48,21 +33,13 @@ class ApiConfig {
     return base;
   }
 
-  /// Retorna la URL base del frontend web (puerto 5173 por defecto)
+  /// Retorna la URL base del frontend web oficial
   static String get webBaseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:5173';
+    const envUrl = String.fromEnvironment('WEB_URL', defaultValue: '');
+    if (envUrl.isNotEmpty) {
+      return envUrl;
     }
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'http://10.0.2.2:5173';
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.windows:
-      case TargetPlatform.linux:
-      default:
-        return 'http://localhost:5173';
-    }
+    return 'https://eventhub.datahuba.com';
   }
 
   // Endpoints del backend

@@ -99,20 +99,20 @@ class EventCard extends StatelessWidget {
                       ),
                     ),
 
-                  // Badge de Categoría
+                  // Badge de Categoría o Concluido
                   Positioned(
                     top: 12,
                     left: 12,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: AppColors.accent,
+                        color: event.isPast ? const Color(0xFF334155) : AppColors.accent,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        event.category.toUpperCase(),
+                        event.isPast ? 'CONCLUIDO' : event.category.toUpperCase(),
                         style: const TextStyle(
-                          color: AppColors.accentFg,
+                          color: Colors.white,
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.6,
@@ -120,6 +120,42 @@ class EventCard extends StatelessWidget {
                       ),
                     ),
                   ),
+
+                  // Overlay para eventos concluidos
+                  if (event.isPast)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          alignment: Alignment.center,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.75),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.history, color: Colors.white, size: 14),
+                                SizedBox(width: 6),
+                                Text(
+                                  'FINALIZADO',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
 
                   // Badge de Fecha
                   Positioned(
@@ -204,16 +240,16 @@ class EventCard extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Entradas desde',
-                              style: TextStyle(color: AppColors.fgMuted, fontSize: 11),
+                            Text(
+                              event.isPast ? 'Estado' : 'Entradas desde',
+                              style: const TextStyle(color: AppColors.fgMuted, fontSize: 11),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Bs. ${event.minPrice.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: AppColors.accent,
-                                fontSize: 18,
+                              event.isPast ? 'Concluido' : 'Bs. ${event.minPrice.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: event.isPast ? AppColors.fgMuted : AppColors.accent,
+                                fontSize: event.isPast ? 16 : 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -222,20 +258,24 @@ class EventCard extends StatelessWidget {
                         ElevatedButton(
                           onPressed: onTap,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: AppColors.accentFg,
+                            backgroundColor: event.isPast ? AppColors.bgSoft : AppColors.accent,
+                            foregroundColor: event.isPast ? AppColors.fg : AppColors.accentFg,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
+                              side: event.isPast ? const BorderSide(color: AppColors.border) : BorderSide.none,
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             elevation: 0,
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text('Ver evento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              SizedBox(width: 4),
-                              Icon(Icons.arrow_forward_ios, size: 12),
+                              Text(
+                                event.isPast ? 'Ver detalles' : 'Ver evento',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.arrow_forward_ios, size: 12),
                             ],
                           ),
                         ),
