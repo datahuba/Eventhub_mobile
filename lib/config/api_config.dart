@@ -11,7 +11,7 @@ class ApiConfig {
   /// Retorna la URL base de la API backend de EventHub.
   /// - En Android Emulator: usa 10.0.2.2:4000
   /// - En iOS Simulator / Web / Desktop: usa localhost:4000
-  /// - Si se define _customHost o un String de entorno 'API_URL', usa ese valor.
+  /// - Si se define _customHost o un String de entorno 'API_URL', usa ese valor prioritariamente.
   static String get baseUrl {
     if (_customHost != null && _customHost!.isNotEmpty) {
       return _customHost!;
@@ -48,8 +48,13 @@ class ApiConfig {
     return base;
   }
 
-  /// Retorna la URL base del frontend web (puerto 5173 por defecto)
+  /// Retorna la URL base del frontend web (puerto 5173 por defecto en local)
   static String get webBaseUrl {
+    const envUrl = String.fromEnvironment('WEB_URL', defaultValue: '');
+    if (envUrl.isNotEmpty) {
+      return envUrl;
+    }
+
     if (kIsWeb) {
       return 'http://localhost:5173';
     }

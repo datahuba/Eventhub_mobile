@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../models/event.dart';
 import '../widgets/tier_chip.dart';
+import '../widgets/event_bottom_purchase_bar.dart';
+import '../widgets/event_info_card.dart';
+import '../widgets/quantity_selector.dart';
 import 'checkout_screen.dart';
 
 class EventDetailScreen extends StatefulWidget {
@@ -276,67 +279,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   ],
                   const SizedBox(height: 20),
 
-                  // Info card: Fecha y Ubicación
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSoft,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.calendar_today_outlined, color: AppColors.accent, size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    event.formattedDate,
-                                    style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold),
-                                  ),
-                                  if (event.time.isNotEmpty)
-                                    Text(
-                                      'Hora: ${event.time}',
-                                      style: const TextStyle(color: AppColors.fgMuted, fontSize: 12),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Divider(color: AppColors.border, height: 1),
-                        ),
-                        Row(
-                          children: [
-                            const Icon(Icons.location_on_outlined, color: AppColors.accent, size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    event.location.isNotEmpty ? event.location : 'Por confirmar',
-                                    style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold),
-                                  ),
-                                  if (event.address.isNotEmpty)
-                                    Text(
-                                      event.address,
-                                      style: const TextStyle(color: AppColors.fgMuted, fontSize: 12),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                  // Info card: Fecha y Ubicación (modularizado)
+                  EventInfoCard(event: event),
                   const SizedBox(height: 24),
 
                   // Descripción
@@ -457,42 +401,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     ),
                   const SizedBox(height: 20),
 
-                  // Selector de cantidad
-                  if (_selectedTier != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSoft,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Cantidad de entradas',
-                            style: TextStyle(color: AppColors.fg, fontSize: 15, fontWeight: FontWeight.w600),
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                onPressed: _decrementQuantity,
-                                icon: const Icon(Icons.remove_circle_outline, color: AppColors.fgMuted),
-                              ),
-                              Text(
-                                '$_quantity',
-                                style: const TextStyle(color: AppColors.fg, fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                              IconButton(
-                                onPressed: _incrementQuantity,
-                                icon: const Icon(Icons.add_circle_outline, color: AppColors.accent),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                  // Selector de cantidad (modularizado)
+                  if (_selectedTier != null)
+                    QuantitySelector(
+                      quantity: _quantity,
+                      onIncrement: _incrementQuantity,
+                      onDecrement: _decrementQuantity,
                     ),
-                  ],
                   const SizedBox(height: 100), // Espacio para el bottom bar
                 ],
               ),
@@ -501,72 +416,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         ],
       ),
 
-      // Barra inferior fija con precio total y botón de compra
-      bottomSheet: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: const BoxDecoration(
-          color: AppColors.bg,
-          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 10,
-              offset: Offset(0, -2),
+      // Barra inferior fija con precio total y botón de compra (modularizada)
+      bottomSheet: EventBottomPurchaseBar(
+        totalPrice: _totalPrice,
+        isPast: event.isPast,
+        isSoldOut: event.isSoldOut,
+        hasSelectedTier: _selectedTier != null,
+        onPurchase: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CheckoutScreen(
+                event: event,
+                selectedTier: _selectedTier!,
+                quantity: _quantity,
+              ),
             ),
-          ],
-        ),
-        child: SafeArea(
-          child: Row(
-            children: [
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Total a pagar', style: TextStyle(color: AppColors.fgMuted, fontSize: 12)),
-                  Text(
-                    'Bs. ${_totalPrice.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: AppColors.accent,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _selectedTier == null || event.isSoldOut
-                      ? null
-                      : () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => CheckoutScreen(
-                                event: event,
-                                selectedTier: _selectedTier!,
-                                quantity: _quantity,
-                              ),
-                            ),
-                          );
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accent,
-                    foregroundColor: AppColors.accentFg,
-                    disabledBackgroundColor: AppColors.border,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Comprar Entradas',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }

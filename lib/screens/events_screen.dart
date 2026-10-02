@@ -5,6 +5,8 @@ import '../services/api_service.dart';
 import '../widgets/event_card.dart';
 import '../widgets/event_filter_sheet.dart';
 import '../widgets/event_search_bar.dart';
+import '../widgets/event_status_tab_bar.dart';
+import '../widgets/events_empty_state.dart';
 import '../widgets/eventhub_logo.dart';
 import 'event_detail_screen.dart';
 import 'tickets_screen.dart';
@@ -33,6 +35,9 @@ class _EventsScreenState extends State<EventsScreen> {
   String _selectedMonth = 'all';
   String _selectedCity = 'all';
   String _selectedPriceRange = 'all'; // 'all', 'free', 'under100', 'over100'
+
+  // Pestaña activa: 0 = En Cartelera, 1 = Pasados
+  int _selectedEventTab = 0;
 
   @override
   void initState() {
@@ -295,101 +300,83 @@ class _EventsScreenState extends State<EventsScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // 2. Indicador de resultados y acción para limpiar
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${filteredEvents.length} evento${filteredEvents.length == 1 ? '' : 's'} encontrado${filteredEvents.length == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        color: AppColors.fgMuted,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (_isFiltered)
-                      GestureDetector(
-                        onTap: _clearAllFilters,
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
+                // 2. Selector de Pestañas: [ En Cartelera ] vs [ Pasados ]
+                Builder(
+                  builder: (context) {
+                    final activeEvents = filteredEvents.where((e) => !e.isPast).toList();
+                    final pastEvents = filteredEvents.where((e) => e.isPast).toList();
+                    final currentTabEvents = _selectedEventTab == 0 ? activeEvents : pastEvents;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        EventStatusTabBar(
+                          selectedTab: _selectedEventTab,
+                          activeCount: activeEvents.length,
+                          pastCount: pastEvents.length,
+                          onTabChanged: (index) => setState(() => _selectedEventTab = index),
+                        ),
+
+                        // 3. Indicador de resultados y acción para limpiar
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(Icons.close, size: 14, color: AppColors.accent),
-                            SizedBox(width: 4),
                             Text(
-                              'Limpiar filtros',
-                              style: TextStyle(
-                                color: AppColors.accent,
+                              '${currentTabEvents.length} evento${currentTabEvents.length == 1 ? '' : 's'} ${_selectedEventTab == 0 ? 'activo' : 'archivado'}${currentTabEvents.length == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                color: AppColors.fgMuted,
                                 fontSize: 13,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
+                            if (_isFiltered)
+                              GestureDetector(
+                                onTap: _clearAllFilters,
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.close, size: 14, color: AppColors.accent),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Limpiar filtros',
+                                      style: TextStyle(
+                                        color: AppColors.accent,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 14),
+                        const SizedBox(height: 14),
 
-                // 3. Listado de Eventos Filtrados o Estado Vacío
-                if (filteredEvents.isEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(top: 20),
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSoft,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.search_off_outlined, color: AppColors.fgLight, size: 56),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'No se encontraron eventos',
-                          style: TextStyle(
-                            color: AppColors.fg,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Probá buscando con otros términos o restablecé los filtros aplicados.',
-                          style: TextStyle(color: AppColors.fgMuted, fontSize: 13),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 18),
-                        ElevatedButton(
-                          onPressed: _clearAllFilters,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: AppColors.accentFg,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                        // 4. Listado de Eventos de la Pestaña o Estado Vacío (modularizado)
+                        if (currentTabEvents.isEmpty)
+                          EventsEmptyState(
+                            isPastTab: _selectedEventTab == 1,
+                            isFiltered: _isFiltered,
+                            onClearFilters: _clearAllFilters,
+                          )
+                        else
+                          ...currentTabEvents.map(
+                            (event) => EventCard(
+                              event: event,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => EventDetailScreen(event: event),
+                                  ),
+                                );
+                              },
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                            elevation: 0,
                           ),
-                          child: const Text('Restablecer Filtros'),
-                        ),
                       ],
-                    ),
-                  )
-                else
-                  ...filteredEvents.map(
-                    (event) => EventCard(
-                      event: event,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => EventDetailScreen(event: event),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                    );
+                  },
+                ),
               ],
             );
           },

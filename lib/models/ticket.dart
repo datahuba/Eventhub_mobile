@@ -11,6 +11,7 @@ class IssuedTicket {
   final String? imageUrl;
   final String? voucherId;
   final DateTime purchasedAt;
+  final DateTime? eventStartsAt;
 
   IssuedTicket({
     required this.id,
@@ -25,7 +26,17 @@ class IssuedTicket {
     this.imageUrl,
     this.voucherId,
     required this.purchasedAt,
+    this.eventStartsAt,
   });
+
+  bool get isPast {
+    if (eventStartsAt != null) {
+      // Se considera evento pasado si ya transcurrieron 6 horas desde la hora de inicio
+      return DateTime.now().isAfter(eventStartsAt!.add(const Duration(hours: 6)));
+    }
+    // Fallback para entradas antiguas sin eventStartsAt: activas por 7 días tras la compra
+    return DateTime.now().difference(purchasedAt).inDays > 7;
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -41,6 +52,7 @@ class IssuedTicket {
       'imageUrl': imageUrl,
       'voucherId': voucherId,
       'purchasedAt': purchasedAt.toIso8601String(),
+      'eventStartsAt': eventStartsAt?.toIso8601String(),
     };
   }
 
@@ -50,6 +62,13 @@ class IssuedTicket {
       parsedDate = DateTime.parse(json['purchasedAt'] ?? DateTime.now().toIso8601String());
     } catch (_) {
       parsedDate = DateTime.now();
+    }
+
+    DateTime? parsedStartsAt;
+    if (json['eventStartsAt'] != null) {
+      try {
+        parsedStartsAt = DateTime.parse(json['eventStartsAt']);
+      } catch (_) {}
     }
 
     return IssuedTicket(
@@ -65,6 +84,7 @@ class IssuedTicket {
       imageUrl: json['imageUrl']?.toString(),
       voucherId: json['voucherId']?.toString(),
       purchasedAt: parsedDate,
+      eventStartsAt: parsedStartsAt,
     );
   }
 }

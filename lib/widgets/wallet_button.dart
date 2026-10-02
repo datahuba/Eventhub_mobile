@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 
 class AppleWalletButton extends StatelessWidget {
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
-  const AppleWalletButton({super.key, required this.onPressed});
+  const AppleWalletButton({super.key, this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -44,9 +44,9 @@ class AppleWalletButton extends StatelessWidget {
 }
 
 class GoogleWalletButton extends StatelessWidget {
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
-  const GoogleWalletButton({super.key, required this.onPressed});
+  const GoogleWalletButton({super.key, this.onPressed});
 
   @override
   Widget build(BuildContext context) {

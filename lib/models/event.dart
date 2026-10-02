@@ -68,6 +68,9 @@ class Event {
     required this.isSoldOut,
   });
 
+  /// Indica si el evento ya concluyó (más de 6 horas transcurridas desde startsAt)
+  bool get isPast => DateTime.now().isAfter(startsAt.add(const Duration(hours: 6)));
+
   /// Retorna el precio mínimo entre los sectores disponibles
   double get minPrice {
     if (tiers.isEmpty) return 0.0;
