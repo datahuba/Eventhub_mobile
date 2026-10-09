@@ -49,6 +49,10 @@ class Event {
   final List<TicketTier> tiers;
   final List<String> pricingNotes;
   final bool isSoldOut;
+  final String? multiplicaQrUrl;
+  final String? beneficiaryName;
+  final String? bankName;
+  final String? accountNumber;
 
   Event({
     required this.id,
@@ -66,6 +70,10 @@ class Event {
     required this.tiers,
     required this.pricingNotes,
     required this.isSoldOut,
+    this.multiplicaQrUrl,
+    this.beneficiaryName,
+    this.bankName,
+    this.accountNumber,
   });
 
   /// Indica si el evento ya concluyó (más de 6 horas transcurridas desde startsAt)
@@ -207,6 +215,10 @@ class Event {
       tiers: parsedTiers,
       pricingNotes: notesList,
       isSoldOut: json['soldOut'] == true,
+      multiplicaQrUrl: json['multiplicaQrUrl'] as String?,
+      beneficiaryName: json['beneficiaryName'] as String?,
+      bankName: json['bankName'] as String?,
+      accountNumber: json['accountNumber'] as String?,
     );
   }
 }

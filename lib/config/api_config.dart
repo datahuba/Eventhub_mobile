@@ -73,6 +73,8 @@ class ApiConfig {
   // Endpoints del backend
   static String get eventsEndpoint => '$baseUrl/events';
   static String eventDetailEndpoint(String id) => '$baseUrl/events/$id';
+  static String get submitEndpoint => '$baseUrl/submit';
+  static String orderDetailEndpoint(String id) => '$baseUrl/orders/$id';
   static String get generateBnbQrEndpoint => '$baseUrl/payments/bnb/generate-qr';
   static String get checkBnbStatusEndpoint => '$baseUrl/payments/bnb/check-status';
 }

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../models/event.dart';
 import '../models/attendee.dart';
-import '../services/api_service.dart';
-import 'bnb_payment_screen.dart';
+import 'multiplica_payment_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final Event event;
@@ -23,7 +22,6 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
-  final ApiService _apiService = ApiService();
 
   // Datos del Comprador
   final TextEditingController _buyerNameController = TextEditingController();
@@ -34,8 +32,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   late List<AttendeeInput> _attendees;
   late List<TextEditingController> _attendeeNameControllers;
   late List<TextEditingController> _attendeeCiControllers;
-
-  bool _isLoading = false;
 
   @override
   void initState() {
@@ -61,13 +57,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   double get _totalPrice => widget.selectedTier.price * widget.quantity;
 
-  Future<void> _submitOrder() async {
-    if (_isLoading) return;
+  void _submitOrder() {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-
-    setState(() => _isLoading = true);
 
     // Sincronizar controladores con la lista de asistentes
     for (int i = 0; i < widget.quantity; i++) {
@@ -75,42 +68,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _attendees[i].ci = _attendeeCiControllers[i].text.trim();
     }
 
-    try {
-      final bnbResponse = await _apiService.generateBnbQr(
-        eventId: widget.event.id,
-        buyerName: _buyerNameController.text.trim(),
-        buyerEmail: _buyerEmailController.text.trim(),
-        buyerPhone: _buyerPhoneController.text.trim(),
-        tier: widget.selectedTier.name,
-        attendees: _attendees,
-      );
-
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-
-      // Navegar a la pantalla de pago BNB con el QR generado
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => BnbPaymentScreen(
-            event: widget.event,
-            selectedTier: widget.selectedTier,
-            bnbResponse: bnbResponse,
-            attendees: _attendees,
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MultiplicaPaymentScreen(
+          event: widget.event,
+          selectedTier: widget.selectedTier,
+          quantity: widget.quantity,
+          buyerName: _buyerNameController.text.trim(),
+          buyerEmail: _buyerEmailController.text.trim().isEmpty ? null : _buyerEmailController.text.trim(),
+          buyerPhone: _buyerPhoneController.text.trim().isEmpty ? null : _buyerPhoneController.text.trim(),
+          attendees: _attendees,
         ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    }
+      ),
+    );
   }
 
   @override
@@ -283,7 +254,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
             // Botón de generación de pago
             ElevatedButton(
-              onPressed: _isLoading ? null : _submitOrder,
+              onPressed: _submitOrder,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accent,
                 foregroundColor: AppColors.accentFg,
@@ -291,16 +262,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 elevation: 0,
               ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                    )
-                  : Text(
-                      'Pagar con QR Simple BNB (Bs. ${_totalPrice.toStringAsFixed(2)})',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+              child: Text(
+                'Continuar al Pago con QR (Bs. ${_totalPrice.toStringAsFixed(2)})',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 40),
           ],

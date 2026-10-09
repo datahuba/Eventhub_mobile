@@ -151,4 +151,97 @@ class ApiService {
       throw Exception('Error al verificar pago: $e');
     }
   }
+
+  /// Envía la orden con comprobante a POST /api/submit para auditoría con IA
+  Future<SubmitOrderResponse> submitOrderWithProof({
+    required String eventId,
+    required String buyerName,
+    String? buyerEmail,
+    String? buyerPhone,
+    required String tier,
+    required List<AttendeeInput> attendees,
+    required List<int> proofBytes,
+    required String proofFileName,
+  }) async {
+    try {
+      final uri = Uri.parse(ApiConfig.submitEndpoint);
+      final request = http.MultipartRequest('POST', uri);
+
+      request.fields['eventId'] = eventId;
+      request.fields['paymentMethod'] = 'multiplica';
+      request.fields['tier'] = tier;
+      request.fields['buyer'] = jsonEncode({
+        'name': buyerName,
+        'email': buyerEmail ?? '',
+        'phone': buyerPhone ?? '',
+      });
+      request.fields['attendees'] = jsonEncode(
+        attendees.map((a) => a.toJson()).toList(),
+      );
+
+      final multipartFile = http.MultipartFile.fromBytes(
+        'proof',
+        proofBytes,
+        filename: proofFileName,
+      );
+      request.files.add(multipartFile);
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 40));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      final dynamic decoded = _safeJsonDecode(response.body);
+
+      if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
+        return SubmitOrderResponse.fromJson(decoded);
+      } else {
+        final errorMsg = decoded is Map<String, dynamic> ? decoded['message'] : 'Error al procesar comprobante';
+        throw Exception(errorMsg ?? 'Error al procesar compra (Código: ${response.statusCode})');
+      }
+    } catch (e) {
+      throw Exception('Fallo en auditoría de pago: $e');
+    }
+  }
+
+  /// Consulta el detalle de una orden y sus tickets generados (GET /api/orders/:id)
+  Future<Map<String, dynamic>> getOrderDetails(String orderId) async {
+    try {
+      final uri = Uri.parse(ApiConfig.orderDetailEndpoint(orderId));
+      final response = await _client.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return _safeJsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('No se pudo consultar el detalle de la orden');
+      }
+    } catch (e) {
+      throw Exception('Error al consultar orden: $e');
+    }
+  }
+}
+
+class SubmitOrderResponse {
+  final String orderId;
+  final String paymentStatus;
+  final String message;
+  final Map<String, dynamic>? evaluation;
+  final Map<String, dynamic>? ocrData;
+
+  SubmitOrderResponse({
+    required this.orderId,
+    required this.paymentStatus,
+    required this.message,
+    this.evaluation,
+    this.ocrData,
+  });
+
+  bool get isCompleted => paymentStatus == 'COMPLETED';
+
+  factory SubmitOrderResponse.fromJson(Map<String, dynamic> json) {
+    return SubmitOrderResponse(
+      orderId: json['orderId']?.toString() ?? '',
+      paymentStatus: json['paymentStatus']?.toString() ?? 'PENDING',
+      message: json['message']?.toString() ?? 'Registro procesado',
+      evaluation: json['evaluation'] as Map<String, dynamic>?,
+      ocrData: json['ocrData'] as Map<String, dynamic>?,
+    );
+  }
 }
