@@ -189,7 +189,35 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               'El Carnet de Identidad (C.I.) es requerido para la validación en puerta.',
               style: TextStyle(color: AppColors.fgMuted, fontSize: 12),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: () {
+                    final buyerName = _buyerNameController.text.trim();
+                    if (buyerName.isNotEmpty && _attendeeNameControllers.isNotEmpty) {
+                      setState(() {
+                        _attendeeNameControllers[0].text = buyerName;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Nombre copiado a Entrada 1'),
+                          duration: Duration(seconds: 1),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_outlined, size: 14, color: AppColors.accent),
+                  label: const Text(
+                    'Copiar mi nombre a Entrada 1',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.accent),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
 
             ...List.generate(widget.quantity, (index) {
               return Container(

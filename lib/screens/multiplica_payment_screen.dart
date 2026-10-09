@@ -148,6 +148,7 @@ class _MultiplicaPaymentScreenState extends State<MultiplicaPaymentScreen> {
 
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
+    HapticFeedback.lightImpact();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('$label copiado al portapapeles'),
@@ -158,7 +159,61 @@ class _MultiplicaPaymentScreenState extends State<MultiplicaPaymentScreen> {
     );
   }
 
+  void _showEnlargedQr(String qrUrl) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'QR Simple Multiplica BCP',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.fg),
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: qrUrl,
+                      height: 280,
+                      width: 280,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Monto exacto: Bs. ${_totalPrice.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.accent),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: Icon(Icons.close, color: Colors.white, size: 20),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _submitWithProof() async {
+    if (_isSubmitting) return;
     if (_proofBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -520,35 +575,59 @@ class _MultiplicaPaymentScreenState extends State<MultiplicaPaymentScreen> {
 
                 // Imagen QR
                 if (multiplicaQr != null && multiplicaQr.isNotEmpty)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      color: Colors.white,
-                      child: CachedNetworkImage(
-                        imageUrl: multiplicaQr,
-                        height: 210,
-                        width: 210,
-                        fit: BoxFit.contain,
-                        placeholder: (ctx, _) => const SizedBox(
-                          height: 210,
-                          width: 210,
-                          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  GestureDetector(
+                    onTap: () => _showEnlargedQr(multiplicaQr),
+                    child: Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            color: Colors.white,
+                            child: CachedNetworkImage(
+                              imageUrl: multiplicaQr,
+                              height: 210,
+                              width: 210,
+                              fit: BoxFit.contain,
+                              placeholder: (ctx, _) => const SizedBox(
+                                height: 210,
+                                width: 210,
+                                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              ),
+                              errorWidget: (ctx, _, __) => Container(
+                                height: 210,
+                                width: 210,
+                                color: AppColors.bgSoft,
+                                child: const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.broken_image_outlined, size: 40, color: AppColors.fgMuted),
+                                    SizedBox(height: 6),
+                                    Text('QR no disponible', style: TextStyle(color: AppColors.fgMuted, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                        errorWidget: (ctx, _, __) => Container(
-                          height: 210,
-                          width: 210,
-                          color: AppColors.bgSoft,
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                        Container(
+                          margin: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xCC000000),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.broken_image_outlined, size: 40, color: AppColors.fgMuted),
-                              SizedBox(height: 6),
-                              Text('QR no disponible', style: TextStyle(color: AppColors.fgMuted, fontSize: 12)),
+                              Icon(Icons.zoom_in, color: Colors.white, size: 12),
+                              SizedBox(width: 3),
+                              Text('Ampliar', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   )
                 else

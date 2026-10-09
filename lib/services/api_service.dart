@@ -189,6 +189,10 @@ class ApiService {
       final streamedResponse = await request.send().timeout(const Duration(seconds: 40));
       final response = await http.Response.fromStream(streamedResponse);
 
+      if (response.statusCode >= 500) {
+        throw Exception('El servidor está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+      }
+
       final dynamic decoded = _safeJsonDecode(response.body);
 
       if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
@@ -207,6 +211,9 @@ class ApiService {
     try {
       final uri = Uri.parse(ApiConfig.orderDetailEndpoint(orderId));
       final response = await _client.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 500) {
+        throw Exception('El servidor está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+      }
       if (response.statusCode == 200) {
         return _safeJsonDecode(response.body) as Map<String, dynamic>;
       } else {
