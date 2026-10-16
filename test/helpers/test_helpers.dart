@@ -11,6 +11,8 @@ class FakeApiService extends ApiService {
   String? voucherIdToReturn;
   List<Event>? eventsToReturn;
   Duration? checkStatusDelay;
+  Exception? exceptionToThrow;
+  int? throwExceptionTimes;
 
   FakeApiService({
     this.statusToReturn = PaymentVerificationStatus.expired,
@@ -19,6 +21,8 @@ class FakeApiService extends ApiService {
     String? voucherId,
     String? voucherIdToReturn,
     this.checkStatusDelay,
+    this.exceptionToThrow,
+    this.throwExceptionTimes,
   }) : voucherIdToReturn = voucherId ?? voucherIdToReturn;
 
   @override
@@ -34,6 +38,12 @@ class FakeApiService extends ApiService {
     checkStatusCallCount++;
     if (checkStatusDelay != null) {
       await Future.delayed(checkStatusDelay!);
+    }
+    if (throwExceptionTimes != null && checkStatusCallCount <= throwExceptionTimes!) {
+      throw exceptionToThrow ?? Exception('Error de conexión con el banco');
+    }
+    if (exceptionToThrow != null && throwExceptionTimes == null) {
+      throw exceptionToThrow!;
     }
     return BnbStatusResponse(
       status: statusToReturn,

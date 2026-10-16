@@ -405,4 +405,123 @@ void main() {
       expect(find.text('Verificando...'), findsNothing);
     });
   });
+
+  group('Issue #10: Manejo de errores de red en polling automático de BNB', () {
+    testWidgets('3 fallos consecutivos en polling automático muestran el banner de advertencia', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService(
+        exceptionToThrow: Exception('Sin conexión WiFi'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      // Inicialmente no hay banner de error
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsNothing);
+      expect(fakeApi.checkStatusCallCount, 0);
+
+      // Tick 1 (4s): 1 fallo
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(fakeApi.checkStatusCallCount, 1);
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsNothing);
+
+      // Tick 2 (4s): 2 fallos
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(fakeApi.checkStatusCallCount, 2);
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsNothing);
+
+      // Tick 3 (4s): 3 fallos consecutivos -> Banner de advertencia visible
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(fakeApi.checkStatusCallCount, 3);
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsOneWidget);
+      expect(
+        find.text("No pudimos verificar el pago. Verificá tu conexión o tocá 'Ya realicé el pago' para reintentar manualmente."),
+        findsAtLeastNWidgets(1),
+      );
+    });
+
+    testWidgets('al recuperar la red tras 3 fallos, un poll exitoso oculta el banner de error', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService(
+        throwExceptionTimes: 3,
+        statusToReturn: PaymentVerificationStatus.pending,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      // 3 fallos consecutivos
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+
+      // Banner visible en fallo 3
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsOneWidget);
+
+      // Tick 4 (4s): 4ta llamada tiene éxito (Pending)
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+
+      // El banner desaparece al tener éxito
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsNothing);
+    });
+
+    testWidgets('click manual en Ya realicé el pago muestra SnackBar de error sin alterar el flujo', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService(
+        exceptionToThrow: Exception('Conexión perdida'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Ya realicé el pago'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Error al consultar: Conexión perdida'), findsOneWidget);
+    });
+  });
 }

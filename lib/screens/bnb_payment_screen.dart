@@ -45,6 +45,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   Uint8List? _qrBytes;
   bool _isChecking = false;
   bool _isExpired = false;
+  int _consecutivePollFailures = 0;
   Timer? _pollingTimer;
   Timer? _countdownTimer;
   late int _secondsRemaining;
@@ -67,7 +68,10 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _pollingTimer = null;
     _countdownTimer?.cancel();
+    _countdownTimer = null;
+    _consecutivePollFailures = 0;
     super.dispose();
   }
 
@@ -147,6 +151,16 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         orderId: widget.bnbResponse.orderId,
         qrId: widget.bnbResponse.qrId,
       );
+
+      if (_consecutivePollFailures > 0) {
+        if (mounted) {
+          setState(() {
+            _consecutivePollFailures = 0;
+          });
+        } else {
+          _consecutivePollFailures = 0;
+        }
+      }
 
       if (statusResp.status == PaymentVerificationStatus.completed) {
         final attendeesRaw = statusResp.attendeesRaw;
@@ -267,13 +281,32 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         }
       }
     } catch (e) {
-      if (isManual && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al consultar: ${e.toString().replaceAll("Exception: ", "")}'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+      if (isManual) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al consultar: ${e.toString().replaceAll("Exception: ", "")}'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      } else {
+        _consecutivePollFailures++;
+        if (mounted) {
+          setState(() {});
+          if (_consecutivePollFailures % 3 == 0) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  "No pudimos verificar el pago. Verificá tu conexión o tocá 'Ya realicé el pago' para reintentar manualmente.",
+                ),
+                backgroundColor: AppColors.error,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        }
       }
     } finally {
       if (mounted) {
@@ -373,6 +406,35 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           ),
         ),
         const SizedBox(height: 24),
+        // Banner de advertencia tras fallos de conexión en el sondeo automático
+        if (_consecutivePollFailures >= 3) ...[
+          Container(
+            key: const Key('bnb_poll_failure_banner'),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.wifi_off_rounded, color: AppColors.error, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "No pudimos verificar el pago. Verificá tu conexión o tocá 'Ya realicé el pago' para reintentar manualmente.",
+                    style: TextStyle(
+                      color: AppColors.error,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
 
         // Contenedor con el Código QR Simple de BNB (modularizado)
         BnbQrContainer(qrBytes: _qrBytes),
