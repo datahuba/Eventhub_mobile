@@ -23,7 +23,7 @@ class EventStatusTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       _TabItem(title: 'En Cartelera', count: activeCount),
-      _TabItem(title: 'Concluidos', count: concludedCount),
+      _TabItem(title: 'Pasados', count: concludedCount),
       _TabItem(title: 'Agotados', count: soldOutCount),
       _TabItem(title: 'Todos los Eventos', count: allCount),
     ];

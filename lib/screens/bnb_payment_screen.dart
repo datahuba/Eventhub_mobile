@@ -9,6 +9,9 @@ import '../models/attendee.dart';
 import '../models/ticket.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../widgets/bnb_countdown_badge.dart';
+import '../widgets/bnb_expired_view.dart';
+import '../widgets/bnb_qr_container.dart';
 import 'payment_success_screen.dart';
 
 class BnbPaymentScreen extends StatefulWidget {
@@ -16,6 +19,9 @@ class BnbPaymentScreen extends StatefulWidget {
   final TicketTier selectedTier;
   final BnbQrResponse bnbResponse;
   final List<AttendeeInput> attendees;
+  final ApiService? apiService;
+  final StorageService? storageService;
+  final int? initialSecondsRemaining;
 
   const BnbPaymentScreen({
     super.key,
@@ -23,6 +29,9 @@ class BnbPaymentScreen extends StatefulWidget {
     required this.selectedTier,
     required this.bnbResponse,
     required this.attendees,
+    this.apiService,
+    this.storageService,
+    this.initialSecondsRemaining,
   });
 
   @override
@@ -30,20 +39,28 @@ class BnbPaymentScreen extends StatefulWidget {
 }
 
 class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
-  final ApiService _apiService = ApiService();
-  final StorageService _storageService = StorageService();
+  late final ApiService _apiService;
+  late final StorageService _storageService;
 
   Uint8List? _qrBytes;
   bool _isChecking = false;
+  bool _isExpired = false;
   Timer? _pollingTimer;
   Timer? _countdownTimer;
-  int _secondsRemaining = 15 * 60; // 15 minutos de vigencia
+  late int _secondsRemaining;
 
   @override
   void initState() {
     super.initState();
+    _apiService = widget.apiService ?? ApiService();
+    _storageService = widget.storageService ?? StorageService();
+    _secondsRemaining = widget.initialSecondsRemaining ?? (15 * 60);
     _decodeQrBase64();
-    _startCountdown();
+    if (_secondsRemaining <= 0) {
+      _isExpired = true;
+    } else {
+      _startCountdown();
+    }
     _startAutoPolling();
   }
 
@@ -60,9 +77,14 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
       if (cleanBase64.contains(',')) {
         cleanBase64 = cleanBase64.split(',').last;
       }
-      setState(() {
-        _qrBytes = base64Decode(cleanBase64);
-      });
+      final decoded = base64Decode(cleanBase64);
+      if (mounted) {
+        setState(() {
+          _qrBytes = decoded;
+        });
+      } else {
+        _qrBytes = decoded;
+      }
     } catch (e) {
       debugPrint('Error al decodificar Base64 de QR BNB: $e');
     }
@@ -72,15 +94,33 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining > 0) {
         setState(() => _secondsRemaining--);
+        if (_secondsRemaining <= 0) {
+          _handleExpired();
+        }
       } else {
-        timer.cancel();
+        _handleExpired();
       }
     });
+  }
+
+  void _handleExpired() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    if (mounted && !_isExpired) {
+      setState(() {
+        _isExpired = true;
+      });
+    }
   }
 
   void _startAutoPolling() {
     // Sondeo suave cada 4 segundos
     _pollingTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (_secondsRemaining <= 0 || _qrBytes == null || _isExpired) {
+        return;
+      }
       _verifyPayment(isManual: false);
     });
   }
@@ -92,11 +132,14 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   }
 
   Future<void> _verifyPayment({bool isManual = true}) async {
-    if (_isChecking) return;
+    if (_isChecking || _isExpired) return;
 
-    _isChecking = true;
-    if (isManual && mounted) {
-      setState(() {});
+    if (mounted) {
+      setState(() {
+        _isChecking = true;
+      });
+    } else {
+      _isChecking = true;
     }
 
     try {
@@ -106,20 +149,61 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
       );
 
       if (statusResp.status == PaymentVerificationStatus.completed) {
-        _pollingTimer?.cancel();
-        _countdownTimer?.cancel();
+        final attendeesRaw = statusResp.attendeesRaw;
+        bool isIncomplete = false;
 
-        // Convertir la respuesta a objetos IssuedTicket
+        if (attendeesRaw == null || attendeesRaw.length < widget.attendees.length) {
+          isIncomplete = true;
+        } else {
+          for (int i = 0; i < widget.attendees.length; i++) {
+            final raw = attendeesRaw[i];
+            if (raw == null || raw is! Map<String, dynamic>) {
+              isIncomplete = true;
+              break;
+            }
+            final id = raw['id']?.toString().trim();
+            final qrCode = (raw['productP'] ?? raw['qrCode'])?.toString().trim();
+            if (id == null || id.isEmpty || qrCode == null || qrCode.isEmpty || id.startsWith('TKT-') || qrCode.startsWith('VALID-')) {
+              isIncomplete = true;
+              break;
+            }
+          }
+        }
+
+        if (isIncomplete || attendeesRaw == null) {
+          _pollingTimer?.cancel();
+          _pollingTimer = null;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'El pago fue acreditado pero las entradas aún se están procesando (Orden: ${widget.bnbResponse.orderId}). Por favor reintentá en unos momentos o contactá a soporte.',
+                ),
+                backgroundColor: AppColors.error,
+                duration: const Duration(seconds: 6),
+              ),
+            );
+          }
+          return;
+        }
+
+        _pollingTimer?.cancel();
+        _pollingTimer = null;
+        _countdownTimer?.cancel();
+        _countdownTimer = null;
+
+        // Convertir la respuesta a objetos IssuedTicket legítimos y firmados
         final List<IssuedTicket> issuedTickets = [];
-        final attendeesRaw = statusResp.attendeesRaw ?? [];
 
         for (int i = 0; i < widget.attendees.length; i++) {
           final attInput = widget.attendees[i];
-          final raw = i < attendeesRaw.length ? attendeesRaw[i] : null;
+          final raw = attendeesRaw[i] as Map<String, dynamic>;
+          final ticketId = raw['id'].toString().trim();
+          final qrCode = (raw['productP'] ?? raw['qrCode']).toString().trim();
 
           issuedTickets.add(
             IssuedTicket(
-              id: raw != null && raw['id'] != null ? raw['id'].toString() : 'TKT-${DateTime.now().millisecondsSinceEpoch}-$i',
+              id: ticketId,
               orderId: widget.bnbResponse.orderId,
               eventTitle: widget.event.title,
               eventDate: widget.event.formattedDate,
@@ -127,10 +211,8 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
               tierName: widget.selectedTier.name,
               attendeeName: attInput.name,
               attendeeCi: attInput.ci,
-              qrCode: raw != null && (raw['productP'] != null || raw['qrCode'] != null)
-                  ? (raw['productP'] ?? raw['qrCode']).toString()
-                  : 'VALID-${widget.bnbResponse.orderId}-$i',
-              imageUrl: raw != null ? raw['imageUrl']?.toString() : null,
+              qrCode: qrCode,
+              imageUrl: raw['imageUrl']?.toString(),
               voucherId: statusResp.voucherId,
               purchasedAt: DateTime.now(),
               eventStartsAt: widget.event.startsAt,
@@ -156,7 +238,14 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         );
       } else if (statusResp.status == PaymentVerificationStatus.expired) {
         _pollingTimer?.cancel();
+        _pollingTimer = null;
         _countdownTimer?.cancel();
+        _countdownTimer = null;
+        if (mounted) {
+          setState(() {
+            _isExpired = true;
+          });
+        }
         if (isManual && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -187,9 +276,12 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         );
       }
     } finally {
-      _isChecking = false;
-      if (isManual && mounted) {
-        setState(() {});
+      if (mounted) {
+        setState(() {
+          _isChecking = false;
+        });
+      } else {
+        _isChecking = false;
       }
     }
   }
@@ -206,197 +298,142 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppColors.border),
         ),
-        title: const Text(
-          'Pago con QR Simple BNB',
-          style: TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 18),
+        title: Text(
+          _isExpired ? 'Orden Expirada' : 'Pago con QR Simple BNB',
+          style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         leading: IconButton(
           icon: const Icon(Icons.close, color: AppColors.fg),
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Banner explicativo seguro
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.successBg,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.lock_outline, color: AppColors.success, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Pago seguro acreditado directamente por la Red BNB / Banco Central',
-                    style: TextStyle(
-                      color: AppColors.success.withValues(alpha: 0.9),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+      body: _isExpired ? _buildExpiredView() : _buildActiveQrView(),
+    );
+  }
+
+  Widget _buildExpiredView() {
+    return BnbExpiredView(
+      bnbResponse: widget.bnbResponse,
+      onBack: () => Navigator.pop(context),
+    );
+  }
+
+  Widget _buildActiveQrView() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        // Banner explicativo seguro
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.successBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.lock_outline, color: AppColors.success, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Pago seguro acreditado directamente por la Red BNB / Banco Central',
+                  style: TextStyle(
+                    color: AppColors.success.withValues(alpha: 0.9),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
+        ),
+        const SizedBox(height: 20),
 
-          // Monto a Pagar
-          Center(
-            child: Column(
-              children: [
-                const Text('Monto total a transferir', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
-                const SizedBox(height: 4),
-                Text(
-                  'Bs. ${widget.bnbResponse.totalAmount.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 34,
-                    fontWeight: FontWeight.w900,
-                  ),
+        // Monto a Pagar
+        Center(
+          child: Column(
+            children: [
+              const Text('Monto total a transferir', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
+              const SizedBox(height: 4),
+              Text(
+                'Bs. ${widget.bnbResponse.totalAmount.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: AppColors.accent,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${widget.bnbResponse.eventTitle} • ${widget.selectedTier.name} (${widget.attendees.length} entrada${widget.attendees.length > 1 ? 's' : ''})',
-                  style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
-                  textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${widget.bnbResponse.eventTitle} • ${widget.selectedTier.name} (${widget.attendees.length} entrada${widget.attendees.length > 1 ? 's' : ''})',
+                style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Contenedor con el Código QR Simple de BNB (modularizado)
+        BnbQrContainer(qrBytes: _qrBytes),
+        const SizedBox(height: 20),
+
+        // Contador de expiración (modularizado)
+        BnbCountdownBadge(
+          secondsRemaining: _secondsRemaining,
+          formattedTime: _formattedTimeRemaining,
+        ),
+        const SizedBox(height: 28),
+
+        // Botón Principal: "Ya realicé el pago"
+        ElevatedButton(
+          onPressed: _isChecking ? null : () => _verifyPayment(isManual: true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: AppColors.accentFg,
+            disabledBackgroundColor: AppColors.accent.withValues(alpha: 0.7),
+            disabledForegroundColor: AppColors.accentFg,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            elevation: 0,
+          ),
+          child: _isChecking
+              ? const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    ),
+                    SizedBox(width: 12),
+                    Text('Verificando...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ],
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle_outline, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Ya realicé el pago',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
+        ),
+        const SizedBox(height: 12),
 
-          // Contenedor con el Código QR Simple de BNB
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.bg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border, width: 1.5),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x0C000000),
-                    blurRadius: 16,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  if (_qrBytes != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(
-                        _qrBytes!,
-                        width: 240,
-                        height: 240,
-                        fit: BoxFit.contain,
-                      ),
-                    )
-                  else
-                    const SizedBox(
-                      width: 240,
-                      height: 240,
-                      child: Center(
-                        child: CircularProgressIndicator(color: AppColors.accent),
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Escaneá con cualquier app bancaria',
-                    style: TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
+        // Texto informativo de sondeo automático
+        const Center(
+          child: Text(
+            'La aplicación verifica automáticamente cada 4 segundos.',
+            style: TextStyle(color: AppColors.fgMuted, fontSize: 12),
           ),
-          const SizedBox(height: 20),
-
-          // Contador de expiración
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.bgSoft,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.timer_outlined,
-                    color: _secondsRemaining < 120 ? AppColors.error : AppColors.fgMuted,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Tiempo restante: $_formattedTimeRemaining',
-                    style: TextStyle(
-                      color: _secondsRemaining < 120 ? AppColors.error : AppColors.fg,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-
-          // Botón Principal: "Ya realicé el pago"
-          ElevatedButton(
-            onPressed: _isChecking ? null : () => _verifyPayment(isManual: true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: AppColors.accentFg,
-              disabledBackgroundColor: AppColors.border,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              elevation: 0,
-            ),
-            child: _isChecking
-                ? const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      ),
-                      SizedBox(width: 12),
-                      Text('Verificando con el banco...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_circle_outline, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Ya realicé el pago',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-          ),
-          const SizedBox(height: 12),
-
-          // Texto informativo de sondeo automático
-          const Center(
-            child: Text(
-              'La aplicación verifica automáticamente cada 4 segundos.',
-              style: TextStyle(color: AppColors.fgMuted, fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 }
+

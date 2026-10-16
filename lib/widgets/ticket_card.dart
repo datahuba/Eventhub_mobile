@@ -271,14 +271,16 @@ class _TicketCardState extends State<TicketCard> {
                 const SizedBox(height: 18),
 
                 // Botón de integración con Billetera Nativa (Apple Wallet o Google Wallet)
-                if (defaultTargetPlatform == TargetPlatform.iOS)
-                  AppleWalletButton(
-                    onPressed: _isProcessingWallet ? null : _handleAppleWallet,
-                  )
-                else
-                  GoogleWalletButton(
-                    onPressed: _isProcessingWallet ? null : _handleGoogleWallet,
-                  ),
+                if (WalletPassService.isValidTicket(ticket)) ...[
+                  if (defaultTargetPlatform == TargetPlatform.iOS)
+                    AppleWalletButton(
+                      onPressed: _isProcessingWallet ? null : _handleAppleWallet,
+                    )
+                  else
+                    GoogleWalletButton(
+                      onPressed: _isProcessingWallet ? null : _handleGoogleWallet,
+                    ),
+                ],
               ],
             ),
           ),

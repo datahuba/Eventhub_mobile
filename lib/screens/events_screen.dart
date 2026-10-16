@@ -17,14 +17,85 @@ const List<String> _monthsEs = [
 ];
 
 class EventsScreen extends StatefulWidget {
-  const EventsScreen({super.key});
+  final ApiService? apiService;
+
+  const EventsScreen({super.key, this.apiService});
+
+  /// Helper modularizado para filtrado de eventos según pestaña y criterios de búsqueda
+  static List<Event> filterEventsHelper(
+    List<Event> events, {
+    int selectedTab = 0,
+    String searchQuery = '',
+    String selectedCategory = 'Todos',
+    String selectedMonth = 'all',
+    String selectedCity = 'all',
+    String selectedPriceRange = 'all',
+  }) {
+    return events.where((e) {
+      // 0. Filtro por pestaña activa:
+      // Tab 0: "En Cartelera" -> solo eventos vigentes (!e.isPast)
+      // Tab 1: "Pasados" -> solo eventos concluidos (e.isPast)
+      // Tab 2: "Agotados" -> solo eventos agotados no pasados (e.isSoldOut && !e.isPast)
+      // Tab 3: "Todos los Eventos" -> todos los eventos
+      if (selectedTab == 0 && e.isPast) {
+        return false;
+      }
+      if (selectedTab == 1 && !e.isPast) {
+        return false;
+      }
+      if (selectedTab == 2 && (!e.isSoldOut || e.isPast)) {
+        return false;
+      }
+
+      // 1. Filtro por búsqueda de texto (título, subtítulo, ubicación, categoría)
+      if (searchQuery.trim().isNotEmpty) {
+        final query = searchQuery.trim().toLowerCase();
+        final matchTitle = e.title.toLowerCase().contains(query);
+        final matchSubtitle = e.subtitle.toLowerCase().contains(query);
+        final matchLoc = e.location.toLowerCase().contains(query);
+        final matchCat = e.category.toLowerCase().contains(query);
+        if (!matchTitle && !matchSubtitle && !matchLoc && !matchCat) {
+          return false;
+        }
+      }
+
+      // 2. Filtro por categoría
+      if (selectedCategory != 'Todos' &&
+          e.category.toLowerCase() != selectedCategory.toLowerCase()) {
+        return false;
+      }
+
+      // 3. Filtro por mes (YYYY-MM)
+      if (selectedMonth != 'all') {
+        final key = '${e.startsAt.year}-${e.startsAt.month.toString().padLeft(2, '0')}';
+        if (key != selectedMonth) return false;
+      }
+
+      // 4. Filtro por ciudad
+      if (selectedCity != 'all') {
+        if (!e.location.toLowerCase().contains(selectedCity.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // 5. Filtro por rango de precio
+      if (selectedPriceRange != 'all') {
+        final minP = e.minPrice;
+        if (selectedPriceRange == 'free' && minP > 0) return false;
+        if (selectedPriceRange == 'under100' && minP > 100) return false;
+        if (selectedPriceRange == 'over100' && minP <= 100) return false;
+      }
+
+      return true;
+    }).toList();
+  }
 
   @override
   State<EventsScreen> createState() => _EventsScreenState();
 }
 
 class _EventsScreenState extends State<EventsScreen> {
-  final ApiService _apiService = ApiService();
+  late final ApiService _apiService;
   final TextEditingController _searchController = TextEditingController();
 
   late Future<List<Event>> _eventsFuture;
@@ -42,6 +113,7 @@ class _EventsScreenState extends State<EventsScreen> {
   @override
   void initState() {
     super.initState();
+    _apiService = widget.apiService ?? ApiService();
     _loadEvents();
   }
 
@@ -88,49 +160,16 @@ class _EventsScreenState extends State<EventsScreen> {
   String _getMonthYearLabel(DateTime dt) =>
       '${_monthsEs[dt.month - 1]} ${dt.year}';
 
-  List<Event> _filterEvents(List<Event> events) {
-    return events.where((e) {
-      // 1. Filtro por búsqueda de texto (título, subtítulo, ubicación, categoría)
-      if (_searchQuery.trim().isNotEmpty) {
-        final query = _searchQuery.trim().toLowerCase();
-        final matchTitle = e.title.toLowerCase().contains(query);
-        final matchSubtitle = e.subtitle.toLowerCase().contains(query);
-        final matchLoc = e.location.toLowerCase().contains(query);
-        final matchCat = e.category.toLowerCase().contains(query);
-        if (!matchTitle && !matchSubtitle && !matchLoc && !matchCat) {
-          return false;
-        }
-      }
-
-      // 2. Filtro por categoría
-      if (_selectedCategory != 'Todos' &&
-          e.category.toLowerCase() != _selectedCategory.toLowerCase()) {
-        return false;
-      }
-
-      // 3. Filtro por mes
-      if (_selectedMonth != 'all') {
-        final key = _getMonthYearKey(e.startsAt);
-        if (key != _selectedMonth) return false;
-      }
-
-      // 4. Filtro por ciudad
-      if (_selectedCity != 'all') {
-        if (!e.location.toLowerCase().contains(_selectedCity.toLowerCase())) {
-          return false;
-        }
-      }
-
-      // 5. Filtro por rango de precio
-      if (_selectedPriceRange != 'all') {
-        final minP = e.minPrice;
-        if (_selectedPriceRange == 'free' && minP > 0) return false;
-        if (_selectedPriceRange == 'under100' && minP > 100) return false;
-        if (_selectedPriceRange == 'over100' && minP <= 100) return false;
-      }
-
-      return true;
-    }).toList();
+  List<Event> _filterEvents(List<Event> events, {int? tab}) {
+    return EventsScreen.filterEventsHelper(
+      events,
+      selectedTab: tab ?? _selectedEventTab,
+      searchQuery: _searchQuery,
+      selectedCategory: _selectedCategory,
+      selectedMonth: _selectedMonth,
+      selectedCity: _selectedCity,
+      selectedPriceRange: _selectedPriceRange,
+    );
   }
 
   @override
@@ -302,26 +341,20 @@ class _EventsScreenState extends State<EventsScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // 2. Selector de Pestañas: [ En Cartelera ] [ Concluidos ] [ Agotados ] [ Todos los Eventos ]
+                // 2. Selector de Pestañas: [ En Cartelera ] [ Pasados ] [ Agotados ] [ Todos los Eventos ]
                 Builder(
                   builder: (context) {
-                    final activeEvents = filteredEvents.where((e) => !e.isPast && !e.isSoldOut).toList();
-                    final concludedEvents = filteredEvents.where((e) => e.isPast).toList();
-                    final soldOutEvents = filteredEvents.where((e) => e.isSoldOut && !e.isPast).toList();
-                    final allEvents = filteredEvents;
+                    final activeEvents = _filterEvents(events, tab: 0);
+                    final pastEvents = _filterEvents(events, tab: 1);
+                    final soldOutEvents = _filterEvents(events, tab: 2);
+                    final allEvents = _filterEvents(events, tab: 3);
 
-                    final currentTabEvents = _selectedEventTab == 0
-                        ? activeEvents
-                        : _selectedEventTab == 1
-                            ? concludedEvents
-                            : _selectedEventTab == 2
-                                ? soldOutEvents
-                                : allEvents;
+                    final currentTabEvents = _filterEvents(events);
 
                     final tabSuffix = _selectedEventTab == 0
                         ? 'activo'
                         : _selectedEventTab == 1
-                            ? 'concluido'
+                            ? 'pasado'
                             : _selectedEventTab == 2
                                 ? 'agotado'
                                 : 'en total';
@@ -332,7 +365,7 @@ class _EventsScreenState extends State<EventsScreen> {
                         EventStatusTabBar(
                           selectedTab: _selectedEventTab,
                           activeCount: activeEvents.length,
-                          concludedCount: concludedEvents.length,
+                          concludedCount: pastEvents.length,
                           soldOutCount: soldOutEvents.length,
                           allCount: allEvents.length,
                           onTabChanged: (index) => setState(() => _selectedEventTab = index),

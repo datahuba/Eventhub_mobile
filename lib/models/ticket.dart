@@ -27,7 +27,19 @@ class IssuedTicket {
     this.voucherId,
     required this.purchasedAt,
     this.eventStartsAt,
-  });
+  }) {
+    if (id.trim().isEmpty) {
+      throw ArgumentError('El id del ticket no puede estar vacío');
+    }
+    if (qrCode.trim().isEmpty) {
+      throw ArgumentError('El qrCode del ticket no puede estar vacío');
+    }
+    if (id.startsWith('TKT-') || qrCode.startsWith('VALID-')) {
+      throw ArgumentError(
+        'No se permiten identificadores sintéticos no firmados por el backend (prefijos TKT- o VALID-)',
+      );
+    }
+  }
 
   bool get isPast {
     if (eventStartsAt != null) {

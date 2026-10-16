@@ -13,6 +13,31 @@ class EventDetailScreen extends StatefulWidget {
 
   const EventDetailScreen({super.key, required this.event});
 
+  static const int defaultMaxQuantity = 10;
+
+  /// Retorna el tope máximo de entradas permitido para un sector.
+  /// Si el sector tiene capacity definida y mayor a 0, se respeta exactamente ese valor.
+  /// Si es null o no está definida, aplica el tope global por defecto (10).
+  static int maxQuantityForTier(TicketTier? tier) {
+    if (tier == null) return defaultMaxQuantity;
+    final cap = tier.capacity;
+    if (cap != null && cap > 0) {
+      return cap;
+    }
+    return defaultMaxQuantity;
+  }
+
+  /// Ajusta la cantidad solicitada según la capacidad del nuevo sector.
+  /// Si la capacidad es 0 o null, mantiene la cantidad previa sin tope.
+  static int clampQuantityForTier(int currentQuantity, TicketTier? tier) {
+    if (tier == null) return currentQuantity;
+    final maxCap = tier.capacity;
+    if (maxCap != null && maxCap > 0 && currentQuantity > maxCap) {
+      return maxCap;
+    }
+    return currentQuantity;
+  }
+
   @override
   State<EventDetailScreen> createState() => _EventDetailScreenState();
 }
@@ -36,20 +61,43 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     return _selectedTier!.price * _quantity;
   }
 
-  void _incrementQuantity() {
-    final maxCap = _selectedTier?.capacity;
-    if (maxCap != null && _quantity >= maxCap) {
+  void _selectTier(TicketTier tier) {
+    if (_selectedTier?.name == tier.name) return;
+
+    final prevQuantity = _quantity;
+    final clampedQuantity = EventDetailScreen.clampQuantityForTier(prevQuantity, tier);
+
+    setState(() {
+      _selectedTier = tier;
+      _quantity = clampedQuantity;
+    });
+
+    if (clampedQuantity < prevQuantity && mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Capacidad máxima de ${_selectedTier!.name} alcanzada'),
+          content: Text('Ajustamos la cantidad a $clampedQuantity por la capacidad de ${tier.name}'),
+          backgroundColor: AppColors.warning,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _incrementQuantity() {
+    final maxCap = EventDetailScreen.maxQuantityForTier(_selectedTier);
+    if (_quantity >= maxCap) {
+      final tierName = _selectedTier?.name ?? 'sector';
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Capacidad máxima de $tierName alcanzada'),
           backgroundColor: AppColors.error,
         ),
       );
       return;
     }
-    if (_quantity < 10) {
-      setState(() => _quantity++);
-    }
+    setState(() => _quantity++);
   }
 
   int _headerPhotoIndex = 0;
@@ -391,12 +439,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       (tier) => TierSelectorChip(
                         tier: tier,
                         isSelected: _selectedTier?.name == tier.name,
-                        onTap: () {
-                          setState(() {
-                            _selectedTier = tier;
-                            _quantity = 1;
-                          });
-                        },
+                        onTap: () => _selectTier(tier),
                       ),
                     ),
                   const SizedBox(height: 20),
