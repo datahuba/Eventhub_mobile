@@ -769,6 +769,172 @@ void main() {
       expect(find.text('Ajustamos la cantidad a 2 por la capacidad de Platino'), findsNothing);
     });
   });
+
+  group('Issue #8: Tope de entradas según capacidad del sector y fallback global de 10', () {
+    test('EventDetailScreen.maxQuantityForTier: evalúa correctamente capacidades null, 3, 10 y 50', () {
+      final tierNull = TicketTier(name: 'General', price: 100.0, capacity: null);
+      final tier3 = TicketTier(name: 'VIP 3', price: 200.0, capacity: 3);
+      final tier10 = TicketTier(name: 'Sector 10', price: 150.0, capacity: 10);
+      final tier50 = TicketTier(name: 'Platea 50', price: 80.0, capacity: 50);
+
+      expect(EventDetailScreen.maxQuantityForTier(tierNull), 10);
+      expect(EventDetailScreen.maxQuantityForTier(tier3), 3);
+      expect(EventDetailScreen.maxQuantityForTier(tier10), 10);
+      expect(EventDetailScreen.maxQuantityForTier(tier50), 50);
+      expect(EventDetailScreen.maxQuantityForTier(null), 10);
+    });
+
+    testWidgets('Widget EventDetailScreen: sector con capacity: 3 permite máximo 3 y muestra SnackBar al intentar superar', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final event = Event(
+        id: 'evt-cap-3',
+        title: 'Show Intimo',
+        subtitle: 'Acústico',
+        heroImage: '',
+        images: [],
+        startsAt: DateTime.now().add(const Duration(days: 3)),
+        time: '20:00',
+        location: 'Club de Jazz',
+        address: 'Calle 10',
+        description: ['Show'],
+        category: 'Música',
+        categoryColor: '#EC3013',
+        tiers: [
+          TicketTier(name: 'VIP', price: 150.0, capacity: 3),
+        ],
+        pricingNotes: [],
+        isSoldOut: false,
+      );
+
+      await tester.pumpWidget(MaterialApp(home: EventDetailScreen(event: event)));
+      await tester.pumpAndSettle();
+
+      final incrementFinder = find.byIcon(Icons.add_circle_outline);
+
+      // Inicia en 1
+      expect(find.text('1'), findsOneWidget);
+
+      // 1 -> 2
+      await tester.tap(incrementFinder);
+      await tester.pump();
+      expect(find.text('2'), findsOneWidget);
+
+      // 2 -> 3
+      await tester.tap(incrementFinder);
+      await tester.pump();
+      expect(find.text('3'), findsOneWidget);
+
+      // Intento de superar 3 -> No incrementa y muestra SnackBar de error
+      await tester.tap(incrementFinder);
+      await tester.pump();
+
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('Capacidad máxima de VIP alcanzada'), findsOneWidget);
+    });
+
+    testWidgets('Widget EventDetailScreen: sector General sin capacity definida tiene tope de 10 y muestra SnackBar', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final event = Event(
+        id: 'evt-cap-null',
+        title: 'Concierto Masivo',
+        subtitle: '',
+        heroImage: '',
+        images: [],
+        startsAt: DateTime.now().add(const Duration(days: 4)),
+        time: '19:00',
+        location: 'Estadio',
+        address: 'Av. Principal',
+        description: ['General sin tope explícito'],
+        category: 'Música',
+        categoryColor: '#EC3013',
+        tiers: [
+          TicketTier(name: 'General', price: 80.0, capacity: null),
+        ],
+        pricingNotes: [],
+        isSoldOut: false,
+      );
+
+      await tester.pumpWidget(MaterialApp(home: EventDetailScreen(event: event)));
+      await tester.pumpAndSettle();
+
+      final incrementFinder = find.byIcon(Icons.add_circle_outline);
+
+      // Incrementar 9 veces hasta llegar a 10
+      for (int i = 0; i < 9; i++) {
+        await tester.tap(incrementFinder);
+        await tester.pump();
+      }
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('Capacidad máxima de General alcanzada'), findsNothing);
+
+      // Intento de superar 10 -> muestra SnackBar y se queda en 10
+      await tester.tap(incrementFinder);
+      await tester.pump();
+
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('Capacidad máxima de General alcanzada'), findsOneWidget);
+    });
+
+    testWidgets('Widget EventDetailScreen: sector con capacity: 50 permite superar 10 hasta llegar a 50 y muestra SnackBar', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final event = Event(
+        id: 'evt-cap-50',
+        title: 'Festival Grande',
+        subtitle: '',
+        heroImage: '',
+        images: [],
+        startsAt: DateTime.now().add(const Duration(days: 10)),
+        time: '18:00',
+        location: 'Parque Central',
+        address: 'Zona Sur',
+        description: ['Platea amplia'],
+        category: 'Festivales',
+        categoryColor: '#EC3013',
+        tiers: [
+          TicketTier(name: 'Platea', price: 50.0, capacity: 50),
+        ],
+        pricingNotes: [],
+        isSoldOut: false,
+      );
+
+      await tester.pumpWidget(MaterialApp(home: EventDetailScreen(event: event)));
+      await tester.pumpAndSettle();
+
+      final incrementFinder = find.byIcon(Icons.add_circle_outline);
+
+      // Incrementar hasta 15 (superando el antiguo límite rígido de 10)
+      for (int i = 0; i < 14; i++) {
+        await tester.tap(incrementFinder);
+        await tester.pump();
+      }
+      expect(find.text('15'), findsOneWidget);
+      expect(find.text('Capacidad máxima de Platea alcanzada'), findsNothing);
+
+      // Incrementar hasta 50 (35 veces más)
+      for (int i = 0; i < 35; i++) {
+        await tester.tap(incrementFinder);
+        await tester.pump();
+      }
+      expect(find.text('50'), findsOneWidget);
+      expect(find.text('Capacidad máxima de Platea alcanzada'), findsNothing);
+
+      // Intento de superar 50 -> muestra SnackBar y se queda en 50
+      await tester.tap(incrementFinder);
+      await tester.pump();
+
+      expect(find.text('50'), findsOneWidget);
+      expect(find.text('Capacidad máxima de Platea alcanzada'), findsOneWidget);
+    });
+  });
 }
 
 

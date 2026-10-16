@@ -13,6 +13,20 @@ class EventDetailScreen extends StatefulWidget {
 
   const EventDetailScreen({super.key, required this.event});
 
+  static const int defaultMaxQuantity = 10;
+
+  /// Retorna el tope máximo de entradas permitido para un sector.
+  /// Si el sector tiene capacity definida y mayor a 0, se respeta exactamente ese valor.
+  /// Si es null o no está definida, aplica el tope global por defecto (10).
+  static int maxQuantityForTier(TicketTier? tier) {
+    if (tier == null) return defaultMaxQuantity;
+    final cap = tier.capacity;
+    if (cap != null && cap > 0) {
+      return cap;
+    }
+    return defaultMaxQuantity;
+  }
+
   /// Ajusta la cantidad solicitada según la capacidad del nuevo sector.
   /// Si la capacidad es 0 o null, mantiene la cantidad previa sin tope.
   static int clampQuantityForTier(int currentQuantity, TicketTier? tier) {
@@ -71,20 +85,19 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   void _incrementQuantity() {
-    final maxCap = _selectedTier?.capacity;
-    if (maxCap != null && maxCap > 0 && _quantity >= maxCap) {
+    final maxCap = EventDetailScreen.maxQuantityForTier(_selectedTier);
+    if (_quantity >= maxCap) {
+      final tierName = _selectedTier?.name ?? 'sector';
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Capacidad máxima de ${_selectedTier!.name} alcanzada'),
+          content: Text('Capacidad máxima de $tierName alcanzada'),
           backgroundColor: AppColors.error,
         ),
       );
       return;
     }
-    if (_quantity < 10) {
-      setState(() => _quantity++);
-    }
+    setState(() => _quantity++);
   }
 
   int _headerPhotoIndex = 0;
