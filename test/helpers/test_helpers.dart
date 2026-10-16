@@ -1,3 +1,4 @@
+import 'package:eventhub_mobile/models/attendee.dart';
 import 'package:eventhub_mobile/models/event.dart';
 import 'package:eventhub_mobile/models/order.dart';
 import 'package:eventhub_mobile/models/ticket.dart';
@@ -11,6 +12,11 @@ class FakeApiService extends ApiService {
   String? voucherIdToReturn;
   List<Event>? eventsToReturn;
   Duration? checkStatusDelay;
+  Exception? exceptionToThrow;
+  int? throwExceptionTimes;
+  int generateBnbQrCallCount = 0;
+  BnbQrResponse? bnbQrResponseToReturn;
+  Exception? generateBnbQrException;
 
   FakeApiService({
     this.statusToReturn = PaymentVerificationStatus.expired,
@@ -19,7 +25,27 @@ class FakeApiService extends ApiService {
     String? voucherId,
     String? voucherIdToReturn,
     this.checkStatusDelay,
+    this.exceptionToThrow,
+    this.throwExceptionTimes,
+    this.bnbQrResponseToReturn,
+    this.generateBnbQrException,
   }) : voucherIdToReturn = voucherId ?? voucherIdToReturn;
+
+  @override
+  Future<BnbQrResponse> generateBnbQr({
+    required String eventId,
+    required String buyerName,
+    String? buyerEmail,
+    String? buyerPhone,
+    required String tier,
+    required List<AttendeeInput> attendees,
+  }) async {
+    generateBnbQrCallCount++;
+    if (generateBnbQrException != null) {
+      throw generateBnbQrException!;
+    }
+    return bnbQrResponseToReturn ?? createDummyBnbResponse();
+  }
 
   @override
   Future<List<Event>> getEvents() async {
@@ -34,6 +60,12 @@ class FakeApiService extends ApiService {
     checkStatusCallCount++;
     if (checkStatusDelay != null) {
       await Future.delayed(checkStatusDelay!);
+    }
+    if (throwExceptionTimes != null && checkStatusCallCount <= throwExceptionTimes!) {
+      throw exceptionToThrow ?? Exception('Error de conexión con el banco');
+    }
+    if (exceptionToThrow != null && throwExceptionTimes == null) {
+      throw exceptionToThrow!;
     }
     return BnbStatusResponse(
       status: statusToReturn,

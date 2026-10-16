@@ -45,6 +45,10 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   Uint8List? _qrBytes;
   bool _isChecking = false;
   bool _isExpired = false;
+  bool _qrDecodeFailed = false;
+  bool _retryFailed = false;
+  bool _isRetryingQr = false;
+  int _consecutivePollFailures = 0;
   Timer? _pollingTimer;
   Timer? _countdownTimer;
   late int _secondsRemaining;
@@ -58,16 +62,21 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
     _decodeQrBase64();
     if (_secondsRemaining <= 0) {
       _isExpired = true;
-    } else {
+    } else if (!_qrDecodeFailed) {
       _startCountdown();
     }
-    _startAutoPolling();
+    if (!_qrDecodeFailed) {
+      _startAutoPolling();
+    }
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _pollingTimer = null;
     _countdownTimer?.cancel();
+    _countdownTimer = null;
+    _consecutivePollFailures = 0;
     super.dispose();
   }
 
@@ -81,12 +90,93 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
       if (mounted) {
         setState(() {
           _qrBytes = decoded;
+          _qrDecodeFailed = false;
+          _retryFailed = false;
         });
       } else {
         _qrBytes = decoded;
+        _qrDecodeFailed = false;
+        _retryFailed = false;
       }
     } catch (e) {
       debugPrint('Error al decodificar Base64 de QR BNB: $e');
+      if (mounted) {
+        setState(() {
+          _qrBytes = null;
+          _qrDecodeFailed = true;
+        });
+      } else {
+        _qrBytes = null;
+        _qrDecodeFailed = true;
+      }
+    }
+  }
+
+  Future<void> _regenerateQr() async {
+    if (_isRetryingQr) return;
+    if (mounted) {
+      setState(() {
+        _isRetryingQr = true;
+        _retryFailed = false;
+      });
+    } else {
+      _isRetryingQr = true;
+      _retryFailed = false;
+    }
+
+    try {
+      if (widget.attendees.isNotEmpty) {
+        final regenerated = await _apiService.generateBnbQr(
+          eventId: widget.event.id,
+          buyerName: widget.attendees.first.name,
+          tier: widget.selectedTier.name,
+          attendees: widget.attendees,
+        );
+        String cleanBase64 = regenerated.qrBase64.trim();
+        if (cleanBase64.contains(',')) {
+          cleanBase64 = cleanBase64.split(',').last;
+        }
+        final decoded = base64Decode(cleanBase64);
+        if (mounted) {
+          setState(() {
+            _qrBytes = decoded;
+            _qrDecodeFailed = false;
+            _retryFailed = false;
+            _isRetryingQr = false;
+          });
+          if (_countdownTimer == null && !_isExpired) _startCountdown();
+          if (_pollingTimer == null && !_isExpired) _startAutoPolling();
+        }
+        return;
+      }
+
+      String raw = widget.bnbResponse.qrBase64.trim();
+      if (raw.contains(',')) raw = raw.split(',').last;
+      String sanitized = raw.replaceAll(RegExp(r'\s+'), '');
+      while (sanitized.length % 4 != 0) {
+        sanitized += '=';
+      }
+      final decoded = base64Decode(sanitized);
+      if (mounted) {
+        setState(() {
+          _qrBytes = decoded;
+          _qrDecodeFailed = false;
+          _retryFailed = false;
+          _isRetryingQr = false;
+        });
+        if (_countdownTimer == null && !_isExpired) _startCountdown();
+        if (_pollingTimer == null && !_isExpired) _startAutoPolling();
+      }
+    } catch (e) {
+      debugPrint('Error al reintentar regenerar/decodificar Base64 de QR BNB: $e');
+      if (mounted) {
+        setState(() {
+          _qrBytes = null;
+          _qrDecodeFailed = true;
+          _retryFailed = true;
+          _isRetryingQr = false;
+        });
+      }
     }
   }
 
@@ -118,7 +208,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   void _startAutoPolling() {
     // Sondeo suave cada 4 segundos
     _pollingTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (_secondsRemaining <= 0 || _qrBytes == null || _isExpired) {
+      if (_secondsRemaining <= 0 || _qrBytes == null || _isExpired || _qrDecodeFailed) {
         return;
       }
       _verifyPayment(isManual: false);
@@ -147,6 +237,16 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         orderId: widget.bnbResponse.orderId,
         qrId: widget.bnbResponse.qrId,
       );
+
+      if (_consecutivePollFailures > 0) {
+        if (mounted) {
+          setState(() {
+            _consecutivePollFailures = 0;
+          });
+        } else {
+          _consecutivePollFailures = 0;
+        }
+      }
 
       if (statusResp.status == PaymentVerificationStatus.completed) {
         final attendeesRaw = statusResp.attendeesRaw;
@@ -267,13 +367,32 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         }
       }
     } catch (e) {
-      if (isManual && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al consultar: ${e.toString().replaceAll("Exception: ", "")}'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+      if (isManual) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al consultar: ${e.toString().replaceAll("Exception: ", "")}'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      } else {
+        _consecutivePollFailures++;
+        if (mounted) {
+          setState(() {});
+          if (_consecutivePollFailures % 3 == 0) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  "No pudimos verificar el pago. Verificá tu conexión o tocá 'Ya realicé el pago' para reintentar manualmente.",
+                ),
+                backgroundColor: AppColors.error,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        }
       }
     } finally {
       if (mounted) {
@@ -373,21 +492,58 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           ),
         ),
         const SizedBox(height: 24),
+        // Banner de advertencia tras fallos de conexión en el sondeo automático
+        if (_consecutivePollFailures >= 3) ...[
+          Container(
+            key: const Key('bnb_poll_failure_banner'),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.wifi_off_rounded, color: AppColors.error, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "No pudimos verificar el pago. Verificá tu conexión o tocá 'Ya realicé el pago' para reintentar manualmente.",
+                    style: TextStyle(
+                      color: AppColors.error,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
 
         // Contenedor con el Código QR Simple de BNB (modularizado)
-        BnbQrContainer(qrBytes: _qrBytes),
+        BnbQrContainer(
+          qrBytes: _qrBytes,
+          isFailed: _qrDecodeFailed,
+          onRetry: _regenerateQr,
+          isRetrying: _isRetryingQr,
+          retryFailed: _retryFailed,
+        ),
         const SizedBox(height: 20),
 
-        // Contador de expiración (modularizado)
-        BnbCountdownBadge(
-          secondsRemaining: _secondsRemaining,
-          formattedTime: _formattedTimeRemaining,
-        ),
-        const SizedBox(height: 28),
+        // Contador de expiración (modularizado) - se oculta si falló el QR
+        if (!_qrDecodeFailed) ...[
+          BnbCountdownBadge(
+            secondsRemaining: _secondsRemaining,
+            formattedTime: _formattedTimeRemaining,
+          ),
+          const SizedBox(height: 28),
+        ],
 
-        // Botón Principal: "Ya realicé el pago"
+        // Botón Principal: "Ya realicé el pago" (deshabilitado si falló el QR)
         ElevatedButton(
-          onPressed: _isChecking ? null : () => _verifyPayment(isManual: true),
+          onPressed: (_isChecking || _qrDecodeFailed) ? null : () => _verifyPayment(isManual: true),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.accent,
             foregroundColor: AppColors.accentFg,

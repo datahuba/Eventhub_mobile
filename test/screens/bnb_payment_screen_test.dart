@@ -7,6 +7,8 @@ import 'package:eventhub_mobile/models/ticket.dart';
 import 'package:eventhub_mobile/screens/bnb_payment_screen.dart';
 import 'package:eventhub_mobile/screens/payment_success_screen.dart';
 import 'package:eventhub_mobile/services/api_service.dart';
+import 'package:eventhub_mobile/widgets/bnb_countdown_badge.dart';
+import 'package:eventhub_mobile/widgets/bnb_qr_container.dart';
 import '../helpers/test_helpers.dart';
 
 void main() {
@@ -403,6 +405,238 @@ void main() {
       expect(find.textContaining('Error al consultar:'), findsOneWidget);
       expect(find.text('Ya realicé el pago'), findsOneWidget);
       expect(find.text('Verificando...'), findsNothing);
+    });
+  });
+
+  group('Issue #10: Manejo de errores de red en polling automático de BNB', () {
+    testWidgets('3 fallos consecutivos en polling automático muestran el banner de advertencia', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService(
+        exceptionToThrow: Exception('Sin conexión WiFi'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      // Inicialmente no hay banner de error
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsNothing);
+      expect(fakeApi.checkStatusCallCount, 0);
+
+      // Tick 1 (4s): 1 fallo
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(fakeApi.checkStatusCallCount, 1);
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsNothing);
+
+      // Tick 2 (4s): 2 fallos
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(fakeApi.checkStatusCallCount, 2);
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsNothing);
+
+      // Tick 3 (4s): 3 fallos consecutivos -> Banner de advertencia visible
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(fakeApi.checkStatusCallCount, 3);
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsOneWidget);
+      expect(
+        find.text("No pudimos verificar el pago. Verificá tu conexión o tocá 'Ya realicé el pago' para reintentar manualmente."),
+        findsAtLeastNWidgets(1),
+      );
+    });
+
+    testWidgets('al recuperar la red tras 3 fallos, un poll exitoso oculta el banner de error', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService(
+        throwExceptionTimes: 3,
+        statusToReturn: PaymentVerificationStatus.pending,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      // 3 fallos consecutivos
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+
+      // Banner visible en fallo 3
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsOneWidget);
+
+      // Tick 4 (4s): 4ta llamada tiene éxito (Pending)
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+
+      // El banner desaparece al tener éxito
+      expect(find.byKey(const Key('bnb_poll_failure_banner')), findsNothing);
+    });
+
+    testWidgets('click manual en Ya realicé el pago muestra SnackBar de error sin alterar el flujo', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService(
+        exceptionToThrow: Exception('Conexión perdida'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Ya realicé el pago'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Error al consultar: Conexión perdida'), findsOneWidget);
+    });
+  });
+
+  group('Issue #11: Falla al decodificar Base64 de QR en BnbPaymentScreen', () {
+    testWidgets('Base64 corrupto muestra widget de error, oculta contador, deshabilita botón y no renderiza Image.memory', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(qrBase64: 'data:image/png;base64,@@@esto_no_es_base64@@@'),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      // Muestra ícono de error y texto explicativo
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(
+        find.text('No pudimos generar el código QR del banco. Tocá Reintentar para volver a pedirlo.'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(ElevatedButton, 'Reintentar'), findsOneWidget);
+
+      // NO renderiza Image.memory
+      expect(find.byType(Image), findsNothing);
+
+      // Contador de expiración oculto
+      expect(find.byType(BnbCountdownBadge), findsNothing);
+
+      // Botón "Ya realicé el pago" deshabilitado
+      final payButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Ya realicé el pago'));
+      expect(payButton.onPressed, isNull);
+    });
+
+    testWidgets('si el reintento de regeneración falla, muestra mensaje de fallo sin crashear', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService(
+        generateBnbQrException: Exception('No se pudo regenerar en el banco'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(qrBase64: 'data:image/png;base64,@@@invalido@@@'),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      // Presionar Reintentar
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Reintentar'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Muestra mensaje de reintento fallido
+      expect(
+        find.text('Reintento fallido. Probá más tarde o contactá a soporte.'),
+        findsOneWidget,
+      );
+      // El botón Reintentar sigue visible para volver a intentar
+      expect(find.widgetWithText(ElevatedButton, 'Reintentar'), findsOneWidget);
+    });
+
+    testWidgets('si el reintento es exitoso, muestra Image.memory, reactiva contador y habilita pago', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final validBnbResponse = createDummyBnbResponse();
+      final fakeApi = FakeApiService(
+        bnbQrResponseToReturn: validBnbResponse,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(qrBase64: 'data:image/png;base64,@@@invalido@@@'),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      // Inicialmente en error
+      expect(find.byType(Image), findsNothing);
+      expect(find.byType(BnbCountdownBadge), findsNothing);
+
+      // Presionar Reintentar con API retornando QR válido
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Reintentar'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Ahora se recuperó con éxito
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.byType(BnbCountdownBadge), findsOneWidget);
+      final payButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Ya realicé el pago'));
+      expect(payButton.onPressed, isNotNull);
     });
   });
 }
