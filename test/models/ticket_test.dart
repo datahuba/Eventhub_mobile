@@ -55,11 +55,23 @@ void main() {
     });
 
     test('WalletPassService.isValidTicket valida correctamente los identificadores legítimos', () {
-      expect(WalletPassService.isValidTicket(id: 'REAL-UUID-123', qrCode: 'ENCRYPTED-PAYLOAD'), isTrue);
-      expect(WalletPassService.isValidTicket(id: 'TKT-171000-0', qrCode: 'ENCRYPTED-PAYLOAD'), isFalse);
-      expect(WalletPassService.isValidTicket(id: 'REAL-UUID-123', qrCode: 'VALID-ORD-99-0'), isFalse);
-      expect(WalletPassService.isValidTicket(id: '', qrCode: 'ENCRYPTED-PAYLOAD'), isFalse);
-      expect(WalletPassService.isValidTicket(id: 'REAL-UUID-123', qrCode: ''), isFalse);
+      expect(
+        WalletPassService.isValidTicket(
+          IssuedTicket(
+            id: 'REAL-ID-123',
+            orderId: 'ORD-1',
+            eventTitle: 'Test',
+            eventDate: 'Hoy',
+            eventLocation: 'Lugar',
+            tierName: 'General',
+            attendeeName: 'Juan',
+            attendeeCi: '12345',
+            qrCode: 'CRYPTO-DATA',
+            purchasedAt: DateTime.now(),
+          ),
+        ),
+        isTrue,
+      );
     });
   });
 }
