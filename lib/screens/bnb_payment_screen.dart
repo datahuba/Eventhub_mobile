@@ -143,22 +143,61 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
       );
 
       if (statusResp.status == PaymentVerificationStatus.completed) {
+        final attendeesRaw = statusResp.attendeesRaw;
+        bool isIncomplete = false;
+
+        if (attendeesRaw == null || attendeesRaw.length < widget.attendees.length) {
+          isIncomplete = true;
+        } else {
+          for (int i = 0; i < widget.attendees.length; i++) {
+            final raw = attendeesRaw[i];
+            if (raw == null || raw is! Map<String, dynamic>) {
+              isIncomplete = true;
+              break;
+            }
+            final id = raw['id']?.toString().trim();
+            final qrCode = (raw['productP'] ?? raw['qrCode'])?.toString().trim();
+            if (id == null || id.isEmpty || qrCode == null || qrCode.isEmpty || id.startsWith('TKT-') || qrCode.startsWith('VALID-')) {
+              isIncomplete = true;
+              break;
+            }
+          }
+        }
+
+        if (isIncomplete || attendeesRaw == null) {
+          _pollingTimer?.cancel();
+          _pollingTimer = null;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'El pago fue acreditado pero las entradas aún se están procesando (Orden: ${widget.bnbResponse.orderId}). Por favor reintentá en unos momentos o contactá a soporte.',
+                ),
+                backgroundColor: AppColors.error,
+                duration: const Duration(seconds: 6),
+              ),
+            );
+          }
+          return;
+        }
+
         _pollingTimer?.cancel();
         _pollingTimer = null;
         _countdownTimer?.cancel();
         _countdownTimer = null;
 
-        // Convertir la respuesta a objetos IssuedTicket
+        // Convertir la respuesta a objetos IssuedTicket legítimos y firmados
         final List<IssuedTicket> issuedTickets = [];
-        final attendeesRaw = statusResp.attendeesRaw ?? [];
 
         for (int i = 0; i < widget.attendees.length; i++) {
           final attInput = widget.attendees[i];
-          final raw = i < attendeesRaw.length ? attendeesRaw[i] : null;
+          final raw = attendeesRaw[i] as Map<String, dynamic>;
+          final ticketId = raw['id'].toString().trim();
+          final qrCode = (raw['productP'] ?? raw['qrCode']).toString().trim();
 
           issuedTickets.add(
             IssuedTicket(
-              id: raw != null && raw['id'] != null ? raw['id'].toString() : 'TKT-${DateTime.now().millisecondsSinceEpoch}-$i',
+              id: ticketId,
               orderId: widget.bnbResponse.orderId,
               eventTitle: widget.event.title,
               eventDate: widget.event.formattedDate,
@@ -166,10 +205,8 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
               tierName: widget.selectedTier.name,
               attendeeName: attInput.name,
               attendeeCi: attInput.ci,
-              qrCode: raw != null && (raw['productP'] != null || raw['qrCode'] != null)
-                  ? (raw['productP'] ?? raw['qrCode']).toString()
-                  : 'VALID-${widget.bnbResponse.orderId}-$i',
-              imageUrl: raw != null ? raw['imageUrl']?.toString() : null,
+              qrCode: qrCode,
+              imageUrl: raw['imageUrl']?.toString(),
               voucherId: statusResp.voucherId,
               purchasedAt: DateTime.now(),
               eventStartsAt: widget.event.startsAt,

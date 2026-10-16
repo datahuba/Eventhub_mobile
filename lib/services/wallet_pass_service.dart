@@ -24,8 +24,21 @@ class WalletPassService {
     return '${ApiConfig.baseUrl}/wallet/google-pass/${ticket.id}';
   }
 
+  /// Valida si el ticket cuenta con identificadores legítimos emitidos por el backend
+  static bool isValidTicket(IssuedTicket ticket) {
+    final id = ticket.id.trim();
+    final qrCode = ticket.qrCode.trim();
+    if (id.isEmpty || qrCode.isEmpty) return false;
+    if (id.startsWith('TKT-') || qrCode.startsWith('VALID-')) return false;
+    return true;
+  }
+
   /// Abre la acción nativa de añadir a Apple Wallet
   static Future<bool> addToAppleWallet(IssuedTicket ticket) async {
+    if (!isValidTicket(ticket)) {
+      debugPrint('No se puede generar pase Apple Wallet: ticket con identificador o QR no válido');
+      return false;
+    }
     final urlString = getAppleWalletPassUrl(ticket);
     final uri = Uri.parse(urlString);
 
@@ -39,6 +52,10 @@ class WalletPassService {
 
   /// Abre la acción nativa de añadir a Google Wallet
   static Future<bool> addToGoogleWallet(IssuedTicket ticket) async {
+    if (!isValidTicket(ticket)) {
+      debugPrint('No se puede generar pase Google Wallet: ticket con identificador o QR no válido');
+      return false;
+    }
     final urlString = getGoogleWalletSaveUrl(ticket);
     final uri = Uri.parse(urlString);
 
