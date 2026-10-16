@@ -22,8 +22,8 @@ class EventsEmptyState extends StatelessWidget {
     switch (selectedTab) {
       case 1:
         icon = Icons.history_toggle_off;
-        title = 'Sin eventos concluidos';
-        description = 'Los eventos que ya finalizaron se archivarán automáticamente en esta sección.';
+        title = 'Sin eventos pasados';
+        description = 'Los eventos que ya concluyeron se archivarán automáticamente en esta sección.';
         break;
       case 2:
         icon = Icons.confirmation_number_outlined;
