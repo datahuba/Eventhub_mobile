@@ -13,6 +13,17 @@ class EventDetailScreen extends StatefulWidget {
 
   const EventDetailScreen({super.key, required this.event});
 
+  /// Ajusta la cantidad solicitada según la capacidad del nuevo sector.
+  /// Si la capacidad es 0 o null, mantiene la cantidad previa sin tope.
+  static int clampQuantityForTier(int currentQuantity, TicketTier? tier) {
+    if (tier == null) return currentQuantity;
+    final maxCap = tier.capacity;
+    if (maxCap != null && maxCap > 0 && currentQuantity > maxCap) {
+      return maxCap;
+    }
+    return currentQuantity;
+  }
+
   @override
   State<EventDetailScreen> createState() => _EventDetailScreenState();
 }
@@ -36,9 +47,33 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     return _selectedTier!.price * _quantity;
   }
 
+  void _selectTier(TicketTier tier) {
+    if (_selectedTier?.name == tier.name) return;
+
+    final prevQuantity = _quantity;
+    final clampedQuantity = EventDetailScreen.clampQuantityForTier(prevQuantity, tier);
+
+    setState(() {
+      _selectedTier = tier;
+      _quantity = clampedQuantity;
+    });
+
+    if (clampedQuantity < prevQuantity && mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ajustamos la cantidad a $clampedQuantity por la capacidad de ${tier.name}'),
+          backgroundColor: AppColors.warning,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   void _incrementQuantity() {
     final maxCap = _selectedTier?.capacity;
-    if (maxCap != null && _quantity >= maxCap) {
+    if (maxCap != null && maxCap > 0 && _quantity >= maxCap) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Capacidad máxima de ${_selectedTier!.name} alcanzada'),
@@ -391,12 +426,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       (tier) => TierSelectorChip(
                         tier: tier,
                         isSelected: _selectedTier?.name == tier.name,
-                        onTap: () {
-                          setState(() {
-                            _selectedTier = tier;
-                            _quantity = 1;
-                          });
-                        },
+                        onTap: () => _selectTier(tier),
                       ),
                     ),
                   const SizedBox(height: 20),
