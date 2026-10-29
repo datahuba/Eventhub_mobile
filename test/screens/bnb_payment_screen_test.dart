@@ -3,12 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:eventhub_mobile/models/attendee.dart';
 import 'package:eventhub_mobile/models/event.dart';
 import 'package:eventhub_mobile/models/order.dart';
-import 'package:eventhub_mobile/models/ticket.dart';
 import 'package:eventhub_mobile/screens/bnb_payment_screen.dart';
 import 'package:eventhub_mobile/screens/payment_success_screen.dart';
-import 'package:eventhub_mobile/services/api_service.dart';
 import 'package:eventhub_mobile/widgets/bnb_countdown_badge.dart';
-import 'package:eventhub_mobile/widgets/bnb_qr_container.dart';
 import '../helpers/test_helpers.dart';
 
 void main() {

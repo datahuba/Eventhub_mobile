@@ -101,7 +101,7 @@ class ApiService {
       ).timeout(const Duration(seconds: 20));
 
       if (response.statusCode >= 500) {
-        throw Exception('El servidor de pagos está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+        throw Exception('El servicio de pagos no está disponible en este momento. Por favor intentá en unos minutos.');
       }
 
       final dynamic decoded = _safeJsonDecode(response.body);
@@ -109,11 +109,12 @@ class ApiService {
       if (response.statusCode == 200 && decoded is Map<String, dynamic> && decoded['success'] == true) {
         return BnbQrResponse.fromJson(decoded);
       } else {
-        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'Error al generar el QR de pago';
-        throw Exception(errorMsg ?? 'Error al generar el QR de pago');
+        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'No se pudo generar el código QR de pago';
+        throw Exception(errorMsg ?? 'No se pudo generar el código QR de pago');
       }
     } catch (e) {
-      throw Exception('Error en pasarela BNB: $e');
+      if (e is Exception) rethrow;
+      throw Exception('No pudimos conectar con el servidor. Por favor revisá tu conexión a internet.');
     }
   }
 
@@ -136,7 +137,7 @@ class ApiService {
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 500) {
-        throw Exception('El servidor está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+        throw Exception('El servicio de verificación no está disponible en este momento. Por favor intentá en unos instantes.');
       }
 
       final dynamic decoded = _safeJsonDecode(response.body);
@@ -144,11 +145,12 @@ class ApiService {
       if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
         return BnbStatusResponse.fromJson(decoded);
       } else {
-        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'Error al verificar el estado del pago';
-        throw Exception(errorMsg ?? 'Error al verificar el estado del pago');
+        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'No se pudo verificar el estado del pago';
+        throw Exception(errorMsg ?? 'No se pudo verificar el estado del pago');
       }
     } catch (e) {
-      throw Exception('Error al verificar pago: $e');
+      if (e is Exception) rethrow;
+      throw Exception('No pudimos verificar el pago. Por favor revisá tu conexión a internet.');
     }
   }
 }

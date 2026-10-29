@@ -418,7 +418,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           child: Divider(height: 1, color: AppColors.border),
         ),
         title: Text(
-          _isExpired ? 'Orden Expirada' : 'Pago con QR Simple BNB',
+          _isExpired ? 'Orden Expirada' : 'Pago con QR Simple',
           style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         leading: IconButton(
@@ -455,7 +455,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Pago seguro acreditado directamente por la Red BNB / Banco Central',
+                  'Pago seguro acreditado directamente por la red bancaria nacional',
                   style: TextStyle(
                     color: AppColors.success.withValues(alpha: 0.9),
                     fontSize: 12,
