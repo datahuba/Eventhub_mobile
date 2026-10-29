@@ -7,6 +7,9 @@ import 'package:eventhub_mobile/services/storage_service.dart';
 
 class FakeApiService extends ApiService {
   int checkStatusCallCount = 0;
+  String? lastCheckStatusOrderId;
+  String? lastCheckStatusQrId;
+  String? lastCheckStatusToken;
   PaymentVerificationStatus statusToReturn;
   List<dynamic>? attendeesRawToReturn;
   String? voucherIdToReturn;
@@ -56,8 +59,12 @@ class FakeApiService extends ApiService {
   Future<BnbStatusResponse> checkBnbStatus({
     required String orderId,
     String? qrId,
+    String? token,
   }) async {
     checkStatusCallCount++;
+    lastCheckStatusOrderId = orderId;
+    lastCheckStatusQrId = qrId;
+    lastCheckStatusToken = token;
     if (checkStatusDelay != null) {
       await Future.delayed(checkStatusDelay!);
     }
@@ -82,7 +89,11 @@ class FailingDelayedApiService extends ApiService {
   FailingDelayedApiService({required this.delay});
 
   @override
-  Future<BnbStatusResponse> checkBnbStatus({required String orderId, String? qrId}) async {
+  Future<BnbStatusResponse> checkBnbStatus({
+    required String orderId,
+    String? qrId,
+    String? token,
+  }) async {
     await Future.delayed(delay);
     throw Exception('Error de conexión con el banco');
   }

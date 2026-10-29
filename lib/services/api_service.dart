@@ -4,6 +4,7 @@ import '../config/api_config.dart';
 import '../models/event.dart';
 import '../models/order.dart';
 import '../models/attendee.dart';
+import '../utils/error_sanitizer.dart';
 
 class ApiService {
   final http.Client _client;
@@ -25,7 +26,7 @@ class ApiService {
       final response = await _client.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode >= 500) {
-        throw Exception('Servidor temporalmente no disponible (HTTP ${response.statusCode})');
+        throw Exception('El servicio de eventos no está disponible temporalmente.');
       }
 
       if (response.statusCode == 200) {
@@ -39,10 +40,10 @@ class ApiService {
         }
         return data.map((json) => Event.fromJson(json as Map<String, dynamic>)).toList();
       } else {
-        throw Exception('Error al cargar eventos (Código: ${response.statusCode})');
+        throw Exception('No se pudieron cargar los eventos');
       }
     } catch (e) {
-      throw Exception('No se pudo conectar con el servidor: $e');
+      throw Exception(ErrorSanitizer.sanitizeEvents(e));
     }
   }
 
@@ -53,7 +54,7 @@ class ApiService {
       final response = await _client.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode >= 500) {
-        throw Exception('Servidor temporalmente no disponible (HTTP ${response.statusCode})');
+        throw Exception('El servicio de eventos no está disponible temporalmente.');
       }
 
       if (response.statusCode == 200) {
@@ -67,14 +68,14 @@ class ApiService {
         }
         return Event.fromJson(data);
       } else {
-        throw Exception('Evento no encontrado (Código: ${response.statusCode})');
+        throw Exception('El evento solicitado no fue encontrado');
       }
     } catch (e) {
-      throw Exception('Error al consultar el evento: $e');
+      throw Exception(ErrorSanitizer.sanitizeEvents(e));
     }
   }
 
-  /// Inicia la compra y genera el QR Simple del BNB llamando a POST /api/payments/bnb/generate-qr
+  /// Inicia la compra y genera el QR Simple llamando a POST /api/payments/qr/generate
   Future<BnbQrResponse> generateBnbQr({
     required String eventId,
     required String buyerName,
@@ -101,7 +102,7 @@ class ApiService {
       ).timeout(const Duration(seconds: 20));
 
       if (response.statusCode >= 500) {
-        throw Exception('El servidor de pagos está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+        throw Exception('El servicio de pagos no está disponible en este momento. Por favor intentá en unos minutos.');
       }
 
       final dynamic decoded = _safeJsonDecode(response.body);
@@ -109,34 +110,41 @@ class ApiService {
       if (response.statusCode == 200 && decoded is Map<String, dynamic> && decoded['success'] == true) {
         return BnbQrResponse.fromJson(decoded);
       } else {
-        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'Error al generar el QR de pago';
-        throw Exception(errorMsg ?? 'Error al generar el QR de pago');
+        final rawError = decoded is Map<String, dynamic> ? decoded['error'] : null;
+        throw Exception(ErrorSanitizer.sanitizePayment(rawError ?? 'No se pudo generar el código QR de pago'));
       }
     } catch (e) {
-      throw Exception('Error en pasarela BNB: $e');
+      throw Exception(ErrorSanitizer.sanitizePayment(e));
     }
   }
 
-  /// Verifica el estado de acreditación del pago consultando POST /api/payments/bnb/check-status
+  /// Verifica el estado de acreditación del pago consultando POST /api/payments/qr/check-status
   Future<BnbStatusResponse> checkBnbStatus({
     required String orderId,
     String? qrId,
+    String? token,
   }) async {
     try {
       final uri = Uri.parse(ApiConfig.checkBnbStatusEndpoint);
       final body = jsonEncode({
         'orderId': orderId,
         if (qrId != null && qrId.isNotEmpty) 'qrId': qrId,
+        if (token != null && token.isNotEmpty) 'token': token,
       });
+
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
 
       final response = await _client.post(
         uri,
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: body,
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 500) {
-        throw Exception('El servidor está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+        throw Exception('El servicio de verificación no está disponible en este momento. Por favor intentá en unos instantes.');
       }
 
       final dynamic decoded = _safeJsonDecode(response.body);
@@ -144,11 +152,11 @@ class ApiService {
       if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
         return BnbStatusResponse.fromJson(decoded);
       } else {
-        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'Error al verificar el estado del pago';
-        throw Exception(errorMsg ?? 'Error al verificar el estado del pago');
+        final rawError = decoded is Map<String, dynamic> ? decoded['error'] : null;
+        throw Exception(ErrorSanitizer.sanitizePayment(rawError ?? 'No se pudo verificar el estado del pago'));
       }
     } catch (e) {
-      throw Exception('Error al verificar pago: $e');
+      throw Exception(ErrorSanitizer.sanitizePayment(e));
     }
   }
 }
