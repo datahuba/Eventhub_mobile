@@ -18,12 +18,14 @@ void main() {
       expect(EventDetailScreen.clampQuantityForTier(1, tierVip), 1);
     });
 
-    test('EventDetailScreen.clampQuantityForTier: mantiene la cantidad si la capacidad es null o 0 (sin tope)', () {
+    test('EventDetailScreen.clampQuantityForTier: mantiene la cantidad si la capacidad es null y ajusta a 0 si la capacidad es 0', () {
       final tierUnlimited = TicketTier(name: 'General', price: 100.0, capacity: null);
-      final tierZeroCap = TicketTier(name: 'Libre', price: 50.0, capacity: 0);
+      final tierZeroCap = TicketTier(name: 'Agotado', price: 50.0, capacity: 0);
+      final tierNegativeCap = TicketTier(name: 'Negativo', price: 50.0, capacity: -1);
 
       expect(EventDetailScreen.clampQuantityForTier(7, tierUnlimited), 7);
-      expect(EventDetailScreen.clampQuantityForTier(8, tierZeroCap), 8);
+      expect(EventDetailScreen.clampQuantityForTier(8, tierZeroCap), 0);
+      expect(EventDetailScreen.clampQuantityForTier(5, tierNegativeCap), 0);
       expect(EventDetailScreen.clampQuantityForTier(4, null), 4);
     });
 

@@ -12,6 +12,7 @@ import '../services/storage_service.dart';
 import '../widgets/bnb_countdown_badge.dart';
 import '../widgets/bnb_expired_view.dart';
 import '../widgets/bnb_qr_container.dart';
+import '../utils/error_sanitizer.dart';
 import 'payment_success_screen.dart';
 
 class BnbPaymentScreen extends StatefulWidget {
@@ -236,6 +237,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
       final statusResp = await _apiService.checkBnbStatus(
         orderId: widget.bnbResponse.orderId,
         qrId: widget.bnbResponse.qrId,
+        token: widget.bnbResponse.token,
       );
 
       if (_consecutivePollFailures > 0) {
@@ -369,9 +371,10 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
     } catch (e) {
       if (isManual) {
         if (mounted) {
+          final safeMessage = ErrorSanitizer.sanitize(e);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error al consultar: ${e.toString().replaceAll("Exception: ", "")}'),
+              content: Text(safeMessage),
               backgroundColor: AppColors.error,
             ),
           );

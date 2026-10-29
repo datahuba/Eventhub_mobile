@@ -58,7 +58,7 @@ void main() {
 
       // Inicialmente en vista de pago
       expect(fakeApi.checkStatusCallCount, 0);
-      expect(find.text('Pago con QR Simple BNB'), findsOneWidget);
+      expect(find.text('Pago con QR Simple'), findsOneWidget);
 
       // 1er tick del polling (4s) -> dispara _verifyPayment
       await tester.pump(const Duration(seconds: 4));
@@ -123,7 +123,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Pago con QR Simple BNB'), findsOneWidget);
+      expect(find.text('Pago con QR Simple'), findsOneWidget);
 
       // Avanzar 2 segundos para agotar el tiempo
       await tester.pump(const Duration(seconds: 1));
@@ -398,8 +398,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
 
-      // Muestra SnackBar de error y botón restaurado
-      expect(find.textContaining('Error al consultar:'), findsOneWidget);
+      // Muestra SnackBar con mensaje sanitizado seguro y botón restaurado
+      expect(find.text('No pudimos conectar con el servidor. Por favor revisá tu conexión a internet.'), findsOneWidget);
+      expect(find.textContaining('Error al consultar:'), findsNothing);
       expect(find.text('Ya realicé el pago'), findsOneWidget);
       expect(find.text('Verificando...'), findsNothing);
     });
@@ -520,7 +521,9 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Error al consultar: Conexión perdida'), findsOneWidget);
+      expect(find.text('No pudimos conectar con el servidor. Por favor revisá tu conexión a internet.'), findsOneWidget);
+      expect(find.textContaining('Conexión perdida'), findsNothing);
+      expect(find.textContaining('Error al consultar:'), findsNothing);
     });
   });
 

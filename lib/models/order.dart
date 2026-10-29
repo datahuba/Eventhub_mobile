@@ -1,6 +1,7 @@
 class BnbQrResponse {
   final bool success;
   final String orderId;
+  final String? token;
   final String qrId;
   final String qrBase64;
   final double totalAmount;
@@ -12,6 +13,7 @@ class BnbQrResponse {
   BnbQrResponse({
     required this.success,
     required this.orderId,
+    this.token,
     required this.qrId,
     required this.qrBase64,
     required this.totalAmount,
@@ -32,6 +34,7 @@ class BnbQrResponse {
     return BnbQrResponse(
       success: json['success'] == true,
       orderId: json['orderId']?.toString() ?? '',
+      token: json['token']?.toString(),
       qrId: json['qrId']?.toString() ?? '',
       qrBase64: json['qrBase64']?.toString() ?? '',
       totalAmount: parsedAmount,

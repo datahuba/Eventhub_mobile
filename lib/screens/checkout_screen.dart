@@ -3,6 +3,7 @@ import '../config/theme.dart';
 import '../models/event.dart';
 import '../models/attendee.dart';
 import '../services/api_service.dart';
+import '../utils/error_sanitizer.dart';
 import 'bnb_payment_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -104,24 +105,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
 
-      String raw = e.toString()
-          .replaceAll('Exception: ', '')
-          .replaceAll('Error: ', '')
-          .replaceAll(RegExp(r'Error en pasarela [A-Z]+:\s*', caseSensitive: false), '')
-          .trim();
-
-      String userFriendlyMessage;
-      if (raw.toLowerCase().contains('agotadas') || raw.toLowerCase().contains('cupos')) {
-        userFriendlyMessage = 'Lo sentimos, las entradas para este sector se han agotado.';
-      } else if (raw.toLowerCase().contains('demanda') || raw.toLowerCase().contains('conflict')) {
-        userFriendlyMessage = 'Hay alta demanda en este momento. Por favor intentá de nuevo en unos segundos.';
-      } else if (raw.toLowerCase().contains('conexión') || raw.toLowerCase().contains('socket') || raw.toLowerCase().contains('network')) {
-        userFriendlyMessage = 'No pudimos conectar con el servicio. Por favor revisá tu conexión a internet.';
-      } else if (raw.toLowerCase().contains('pasarela') || raw.toLowerCase().contains('500')) {
-        userFriendlyMessage = 'El servicio de pago no está disponible temporalmente. Por favor intentá en unos minutos.';
-      } else {
-        userFriendlyMessage = raw.isNotEmpty ? raw : 'No se pudo iniciar el proceso de pago. Por favor intentá nuevamente.';
-      }
+      final userFriendlyMessage = ErrorSanitizer.sanitize(e);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

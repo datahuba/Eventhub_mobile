@@ -56,6 +56,7 @@ class FakeApiService extends ApiService {
   Future<BnbStatusResponse> checkBnbStatus({
     required String orderId,
     String? qrId,
+    String? token,
   }) async {
     checkStatusCallCount++;
     if (checkStatusDelay != null) {
@@ -82,7 +83,11 @@ class FailingDelayedApiService extends ApiService {
   FailingDelayedApiService({required this.delay});
 
   @override
-  Future<BnbStatusResponse> checkBnbStatus({required String orderId, String? qrId}) async {
+  Future<BnbStatusResponse> checkBnbStatus({
+    required String orderId,
+    String? qrId,
+    String? token,
+  }) async {
     await Future.delayed(delay);
     throw Exception('Error de conexión con el banco');
   }
