@@ -43,7 +43,7 @@ class ApiService {
         throw Exception('No se pudieron cargar los eventos');
       }
     } catch (e) {
-      throw Exception(ErrorSanitizer.sanitize(e));
+      throw Exception(ErrorSanitizer.sanitizeEvents(e));
     }
   }
 
@@ -71,7 +71,7 @@ class ApiService {
         throw Exception('El evento solicitado no fue encontrado');
       }
     } catch (e) {
-      throw Exception(ErrorSanitizer.sanitize(e));
+      throw Exception(ErrorSanitizer.sanitizeEvents(e));
     }
   }
 
@@ -111,10 +111,10 @@ class ApiService {
         return BnbQrResponse.fromJson(decoded);
       } else {
         final rawError = decoded is Map<String, dynamic> ? decoded['error'] : null;
-        throw Exception(ErrorSanitizer.sanitize(rawError ?? 'No se pudo generar el código QR de pago'));
+        throw Exception(ErrorSanitizer.sanitizePayment(rawError ?? 'No se pudo generar el código QR de pago'));
       }
     } catch (e) {
-      throw Exception(ErrorSanitizer.sanitize(e));
+      throw Exception(ErrorSanitizer.sanitizePayment(e));
     }
   }
 
@@ -153,10 +153,10 @@ class ApiService {
         return BnbStatusResponse.fromJson(decoded);
       } else {
         final rawError = decoded is Map<String, dynamic> ? decoded['error'] : null;
-        throw Exception(ErrorSanitizer.sanitize(rawError ?? 'No se pudo verificar el estado del pago'));
+        throw Exception(ErrorSanitizer.sanitizePayment(rawError ?? 'No se pudo verificar el estado del pago'));
       }
     } catch (e) {
-      throw Exception(ErrorSanitizer.sanitize(e));
+      throw Exception(ErrorSanitizer.sanitizePayment(e));
     }
   }
 }

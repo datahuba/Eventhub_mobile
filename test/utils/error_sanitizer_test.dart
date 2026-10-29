@@ -48,19 +48,33 @@ void main() {
       expect(proxyResult.contains('<html>'), false);
     });
 
-    test('Mapea errores 500 y de pasarela interna a mensaje de indisponibilidad temporal', () {
+    test('Mapea errores 500 y de pasarela a mensaje de pagos sin afectar eventos', () {
       const serverErr = '500 Internal Server Error: Database transaction deadlock';
       const gatewayErr = 'Error en pasarela de pagos Pagaya: Code 9999 Signature Mismatch';
 
-      final serverResult = ErrorSanitizer.sanitize(serverErr);
-      final gatewayResult = ErrorSanitizer.sanitize(gatewayErr);
+      final paymentResult = ErrorSanitizer.sanitizePayment(serverErr);
+      final gatewayResult = ErrorSanitizer.sanitizePayment(gatewayErr);
 
-      expect(serverResult, 'El servicio de pagos no está disponible temporalmente. Por favor intentá en unos minutos.');
+      expect(paymentResult, 'El servicio de pagos no está disponible temporalmente. Por favor intentá en unos minutos.');
       expect(gatewayResult, 'El servicio de pagos no está disponible temporalmente. Por favor intentá en unos minutos.');
 
-      expect(serverResult.contains('Database'), false);
+      expect(paymentResult.contains('Database'), false);
       expect(gatewayResult.contains('Pagaya'), false);
       expect(gatewayResult.contains('9999'), false);
+    });
+
+    test('Mapea errores 500 en catálogo o detalle de eventos a servicio de eventos (no de pagos)', () {
+      const eventServerErr = '500 Internal Server Error en /api/events: Connection timeout to PostgreSQL';
+
+      final eventsResult = ErrorSanitizer.sanitizeEvents(eventServerErr);
+      final eventsFallback = ErrorSanitizer.sanitizeEvents('Error desconocido al listar cartelera');
+
+      expect(eventsResult, 'El servicio de eventos no está disponible temporalmente. Por favor intentá en unos instantes.');
+      expect(eventsResult.contains('pagos'), false);
+      expect(eventsResult.contains('PostgreSQL'), false);
+
+      expect(eventsFallback, 'No se pudieron cargar los eventos. Por favor intentá nuevamente.');
+      expect(eventsFallback.contains('pagos'), false);
     });
 
     test('Mapea mensajes de agotado/aforo a mensaje seguro de entradas agotadas', () {

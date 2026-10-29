@@ -638,5 +638,80 @@ void main() {
       final payButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Ya realicé el pago'));
       expect(payButton.onPressed, isNotNull);
     });
+
+    testWidgets('al regenerar el QR, checkBnbStatus consulta con el nuevo orderId, qrId y token de la orden regenerada', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      const initialOrderId = 'ORD-ORIGINAL-001';
+      const initialQrId = 'QR-ORIGINAL-001';
+      const initialToken = 'token-original-001';
+
+      const regeneratedOrderId = 'ORD-REGENERATED-999';
+      const regeneratedQrId = 'QR-REGENERATED-999';
+      const regeneratedToken = 'token-regenerated-999';
+
+      final regeneratedResponse = BnbQrResponse(
+        success: true,
+        orderId: regeneratedOrderId,
+        qrId: regeneratedQrId,
+        token: regeneratedToken,
+        qrBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        totalAmount: 100.0,
+        currency: 'BOB',
+        eventTitle: 'Concierto de Prueba',
+        tier: 'General',
+        quantity: 1,
+      );
+
+      final fakeApi = FakeApiService(
+        bnbQrResponseToReturn: regeneratedResponse,
+        statusToReturn: PaymentVerificationStatus.pending,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: BnbQrResponse(
+              success: true,
+              orderId: initialOrderId,
+              qrId: initialQrId,
+              token: initialToken,
+              qrBase64: 'data:image/png;base64,@@@invalido@@@',
+              totalAmount: 100.0,
+              currency: 'BOB',
+              eventTitle: 'Concierto de Prueba',
+              tier: 'General',
+              quantity: 1,
+            ),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      // Reintentar regeneración de QR
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Reintentar'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Verificar que el QR fue regenerado exitosamente
+      expect(fakeApi.generateBnbQrCallCount, 1);
+
+      // Presionar "Ya realicé el pago" para verificar estado
+      await tester.tap(find.text('Ya realicé el pago'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Comprobar que checkBnbStatus recibió los datos de la orden REGENERADA y NO de la orden inicial
+      expect(fakeApi.lastCheckStatusOrderId, regeneratedOrderId);
+      expect(fakeApi.lastCheckStatusQrId, regeneratedQrId);
+      expect(fakeApi.lastCheckStatusToken, regeneratedToken);
+
+      expect(fakeApi.lastCheckStatusOrderId != initialOrderId, true);
+    });
   });
 }

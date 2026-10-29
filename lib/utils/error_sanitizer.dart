@@ -1,8 +1,15 @@
+enum ErrorContext {
+  general,
+  events,
+  payments,
+}
+
 /// Utilidad centralizada para sanitizar errores técnicos, excepciones de red y mensajes de proveedores
 /// garantizando que nunca se expongan detalles técnicos, URLs, IPs, stack traces o códigos internos al usuario.
 class ErrorSanitizer {
   /// Transforma cualquier error o excepción a un mensaje seguro, amigable y en español neutral.
-  static String sanitize(dynamic error) {
+  /// Permite especificar el contexto (general, eventos, pagos) para evitar mensajes engañosos.
+  static String sanitize(dynamic error, {ErrorContext context = ErrorContext.general}) {
     if (error == null) {
       return 'Ocurrió un problema inesperado. Por favor intentá nuevamente.';
     }
@@ -27,12 +34,14 @@ class ErrorSanitizer {
       return 'Hay alta demanda en este momento. Por favor intentá de nuevo en unos segundos.';
     }
 
-    // 3. Timeouts de red o proveedor
-    if (raw.contains('timeoutexception') ||
-        raw.contains('timed out') ||
-        raw.contains('timeout') ||
-        raw.contains('tardó demasiado') ||
-        raw.contains('tiempo de espera')) {
+    // 3. Timeouts de red o proveedor (cuando no es un error 500 del servidor)
+    if ((raw.contains('timeoutexception') ||
+            raw.contains('timed out') ||
+            raw.contains('timeout') ||
+            raw.contains('tardó demasiado') ||
+            raw.contains('tiempo de espera')) &&
+        !raw.contains('500') &&
+        !raw.contains('internal server error')) {
       return 'El servidor tardó demasiado en responder. Por favor revisá tu conexión e intentá de nuevo.';
     }
 
@@ -71,7 +80,13 @@ class ErrorSanitizer {
         raw.contains('no está disponible') ||
         raw.contains('verificación') ||
         raw.contains('internal server error')) {
-      return 'El servicio de pagos no está disponible temporalmente. Por favor intentá en unos minutos.';
+      if (context == ErrorContext.events || raw.contains('evento') || raw.contains('cartelera')) {
+        return 'El servicio de eventos no está disponible temporalmente. Por favor intentá en unos instantes.';
+      }
+      if (context == ErrorContext.payments || raw.contains('pago') || raw.contains('qr') || raw.contains('banco') || raw.contains('verificación')) {
+        return 'El servicio de pagos no está disponible temporalmente. Por favor intentá en unos minutos.';
+      }
+      return 'El servicio no está disponible temporalmente. Por favor intentá en unos instantes.';
     }
 
     // 7. Validaciones específicas de reglas de negocio
@@ -86,6 +101,15 @@ class ErrorSanitizer {
     }
 
     // 8. Fallback estricto de seguridad: NUNCA devolver el error crudo
+    if (context == ErrorContext.events) {
+      return 'No se pudieron cargar los eventos. Por favor intentá nuevamente.';
+    }
     return 'No se pudo completar la operación. Por favor intentá nuevamente.';
   }
+
+  /// Método específico para sanitizar errores al consultar o listar eventos
+  static String sanitizeEvents(dynamic error) => sanitize(error, context: ErrorContext.events);
+
+  /// Método específico para sanitizar errores en flujos de pago o verificación
+  static String sanitizePayment(dynamic error) => sanitize(error, context: ErrorContext.payments);
 }
