@@ -440,7 +440,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
 
   Widget _buildExpiredView() {
     return BnbExpiredView(
-      bnbResponse: widget.bnbResponse,
+      bnbResponse: _currentBnbResponse,
       onBack: () => Navigator.pop(context),
     );
   }

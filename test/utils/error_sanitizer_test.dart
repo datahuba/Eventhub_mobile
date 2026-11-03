@@ -77,14 +77,47 @@ void main() {
       expect(eventsFallback.contains('pagos'), false);
     });
 
-    test('Mapea mensajes de agotado/aforo a mensaje seguro de entradas agotadas', () {
-      const soldOutErr1 = 'Cupo insuficiente. Capacidad restante: 0';
-      const soldOutErr2 = 'Entradas agotadas para este sector';
-      const soldOutErr3 = 'Sector VIP is sold out';
+    test('Distingue límite máximo de 10 entradas incluso si el mensaje menciona cupo o capacidad', () {
+      const limitErr1 = 'No se pueden comprar más de 10 entradas por orden. Por razones de seguridad y control de cupos, el límite máximo permitido por orden es de 10 entradas.';
+      const limitErr2 = 'Supera el cupo máximo por orden. Límite máximo: 10 entradas.';
+      const limitErr3 = 'El límite máximo de capacidad por compra es de 10 entradas.';
+      const limitErr4 = 'No se pueden comprar más de 10 entradas.';
 
-      expect(ErrorSanitizer.sanitize(soldOutErr1), 'Lo sentimos, las entradas para este sector se han agotado.');
-      expect(ErrorSanitizer.sanitize(soldOutErr2), 'Lo sentimos, las entradas para este sector se han agotado.');
-      expect(ErrorSanitizer.sanitize(soldOutErr3), 'Lo sentimos, las entradas para este sector se han agotado.');
+      expect(ErrorSanitizer.sanitize(limitErr1), 'No se pueden comprar más de 10 entradas por orden.');
+      expect(ErrorSanitizer.sanitize(limitErr2), 'No se pueden comprar más de 10 entradas por orden.');
+      expect(ErrorSanitizer.sanitize(limitErr3), 'No se pueden comprar más de 10 entradas por orden.');
+      expect(ErrorSanitizer.sanitize(limitErr4), 'No se pueden comprar más de 10 entradas por orden.');
+    });
+
+    test('Distingue capacidad restante mayor a cero y no lo considera agotado', () {
+      // Caso backend típico: incluye la palabra "agotadas" pero informa Cupos restantes: 3
+      const backendRemainingErr = 'Entradas agotadas para el sector "General". Cupos restantes: 3.';
+      const remainingPluralErr = 'Capacidad insuficiente. Cupos restantes: 4';
+      const remainingSingularErr = 'No hay suficiente capacidad. Cupos restantes: 1';
+      const remainingAltErr = 'Solo quedan 2 cupos disponibles para este sector';
+      const remainingGeneralErr = 'Capacidad insuficiente para la cantidad solicitada';
+
+      expect(ErrorSanitizer.sanitize(backendRemainingErr), 'No hay suficientes entradas disponibles. Solo quedan 3 cupos disponibles.');
+      expect(ErrorSanitizer.sanitize(remainingPluralErr), 'No hay suficientes entradas disponibles. Solo quedan 4 cupos disponibles.');
+      expect(ErrorSanitizer.sanitize(remainingSingularErr), 'No hay suficientes entradas disponibles. Solo queda 1 cupo disponible.');
+      expect(ErrorSanitizer.sanitize(remainingAltErr), 'No hay suficientes entradas disponibles. Solo quedan 2 cupos disponibles.');
+      expect(ErrorSanitizer.sanitize(remainingGeneralErr), 'No hay suficientes entradas disponibles para la cantidad solicitada.');
+    });
+
+    test('Mapea mensajes de agotado real o capacidad 0 a entradas agotadas', () {
+      const soldOutZero1 = 'Cupo insuficiente. Capacidad restante: 0';
+      const soldOutZero2 = 'Entradas agotadas para el sector "VIP". Cupos restantes: 0.';
+      const soldOutText = 'Entradas agotadas para este sector';
+      const soldOutEnglish = 'Sector VIP is sold out';
+      const soldOutSinEntradas = 'Sin entradas disponibles';
+      const soldOutSinCupo = 'Sin cupo disponible';
+
+      expect(ErrorSanitizer.sanitize(soldOutZero1), 'Lo sentimos, las entradas para este sector se han agotado.');
+      expect(ErrorSanitizer.sanitize(soldOutZero2), 'Lo sentimos, las entradas para este sector se han agotado.');
+      expect(ErrorSanitizer.sanitize(soldOutText), 'Lo sentimos, las entradas para este sector se han agotado.');
+      expect(ErrorSanitizer.sanitize(soldOutEnglish), 'Lo sentimos, las entradas para este sector se han agotado.');
+      expect(ErrorSanitizer.sanitize(soldOutSinEntradas), 'Lo sentimos, las entradas para este sector se han agotado.');
+      expect(ErrorSanitizer.sanitize(soldOutSinCupo), 'Lo sentimos, las entradas para este sector se han agotado.');
     });
 
     test('Fallback estricto ante objetos o excepciones no reconocidas nunca expone el contenido crudo', () {
