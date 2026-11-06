@@ -139,7 +139,7 @@ void main() {
       );
     });
 
-    test('checkBnbStatus envía orderId, qrId, orderToken en headers y body', () async {
+    test('checkBnbStatus envía orderId, qrId y token de orden en Authorization header y body', () async {
       late http.Request capturedRequest;
 
       final mockClient = MockClient((request) async {
@@ -173,6 +173,7 @@ void main() {
       expect(body['orderId'], 'ord-contract-100');
       expect(body['qrId'], 'qr-contract-100');
       expect(body['token'], 'token-auth-order-100');
+      expect(body['orderToken'], 'token-auth-order-100');
 
       expect(response.status, PaymentVerificationStatus.completed);
       expect(response.orderId, 'ord-contract-100');

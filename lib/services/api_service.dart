@@ -130,6 +130,7 @@ class ApiService {
         'orderId': orderId,
         if (qrId != null && qrId.isNotEmpty) 'qrId': qrId,
         if (token != null && token.isNotEmpty) 'token': token,
+        if (token != null && token.isNotEmpty) 'orderToken': token,
       });
 
       final headers = <String, String>{
@@ -144,7 +145,7 @@ class ApiService {
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 500) {
-        throw Exception('El servicio de verificación no está disponible en este momento. Por favor intentá en unos instantes.');
+        throw Exception('El servicio de pagos no está disponible temporalmente. Por favor intentá en unos minutos.');
       }
 
       final dynamic decoded = _safeJsonDecode(response.body);
