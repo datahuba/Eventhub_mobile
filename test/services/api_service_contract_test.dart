@@ -78,8 +78,8 @@ void main() {
 
       final api = ApiService(client: mockClient);
 
-      expect(
-        () => api.generateBnbQr(
+      await expectLater(
+        api.generateBnbQr(
           eventId: 'evt-sold-out',
           buyerName: 'Pedro Intento',
           tier: 'VIP',
@@ -99,8 +99,8 @@ void main() {
 
       final api = ApiService(client: mockClient);
 
-      expect(
-        () => api.generateBnbQr(
+      await expectLater(
+        api.generateBnbQr(
           eventId: 'evt-1',
           buyerName: 'Usuario',
           tier: 'General',
@@ -125,8 +125,8 @@ void main() {
 
       final api = ApiService(client: mockClient);
 
-      expect(
-        () => api.generateBnbQr(
+      await expectLater(
+        api.generateBnbQr(
           eventId: 'evt-1',
           buyerName: 'Usuario',
           tier: 'General',
@@ -190,8 +190,8 @@ void main() {
 
       final api = ApiService(client: mockClient);
 
-      expect(
-        () => api.checkBnbStatus(orderId: 'ord-1', qrId: 'qr-1'),
+      await expectLater(
+        api.checkBnbStatus(orderId: 'ord-1', qrId: 'qr-1'),
         throwsA(predicate((e) {
           final msg = e.toString();
           return !msg.contains('P2034') &&
