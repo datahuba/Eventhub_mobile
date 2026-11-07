@@ -689,6 +689,7 @@ void main() {
             ),
             attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
             apiService: fakeApi,
+            initialSecondsRemaining: 2,
           ),
         ),
       );
@@ -696,7 +697,7 @@ void main() {
       // Reintentar regeneración de QR
       await tester.tap(find.widgetWithText(ElevatedButton, 'Reintentar'));
       await tester.pump();
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Verificar que el QR fue regenerado exitosamente
       expect(fakeApi.generateBnbQrCallCount, 1);
@@ -704,7 +705,7 @@ void main() {
       // Presionar "Ya realicé el pago" para verificar estado
       await tester.tap(find.text('Ya realicé el pago'));
       await tester.pump();
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Comprobar que checkBnbStatus recibió los datos de la orden REGENERADA y NO de la orden inicial
       expect(fakeApi.lastCheckStatusOrderId, regeneratedOrderId);

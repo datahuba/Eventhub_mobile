@@ -75,7 +75,7 @@ class ApiService {
     }
   }
 
-  /// Inicia la compra y genera el QR Simple llamando a POST /api/payments/qr/generate
+  /// Inicia la compra y genera la orden con QR llamando a POST /api/payments/v1/orders
   Future<BnbQrResponse> generateBnbQr({
     required String eventId,
     required String buyerName,
@@ -107,10 +107,14 @@ class ApiService {
 
       final dynamic decoded = _safeJsonDecode(response.body);
 
-      if (response.statusCode == 200 && decoded is Map<String, dynamic> && decoded['success'] == true) {
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          decoded is Map<String, dynamic> &&
+          (decoded['success'] == true || decoded['orderId'] != null)) {
         return BnbQrResponse.fromJson(decoded);
       } else {
-        final rawError = decoded is Map<String, dynamic> ? decoded['error'] : null;
+        final rawError = decoded is Map<String, dynamic>
+            ? (decoded['message'] ?? decoded['error'])
+            : null;
         throw Exception(ErrorSanitizer.sanitizePayment(rawError ?? 'No se pudo generar el código QR de pago'));
       }
     } catch (e) {
@@ -118,19 +122,16 @@ class ApiService {
     }
   }
 
-  /// Verifica el estado de acreditación del pago consultando POST /api/payments/qr/check-status
+  /// Verifica el estado de acreditación del pago consultando POST /api/payments/v1/orders/:orderId/status
   Future<BnbStatusResponse> checkBnbStatus({
     required String orderId,
     String? qrId,
     String? token,
   }) async {
     try {
-      final uri = Uri.parse(ApiConfig.checkBnbStatusEndpoint);
+      final uri = Uri.parse(ApiConfig.checkBnbStatusEndpoint(orderId));
       final body = jsonEncode({
-        'orderId': orderId,
         if (qrId != null && qrId.isNotEmpty) 'qrId': qrId,
-        if (token != null && token.isNotEmpty) 'token': token,
-        if (token != null && token.isNotEmpty) 'orderToken': token,
       });
 
       final headers = <String, String>{
@@ -151,9 +152,11 @@ class ApiService {
       final dynamic decoded = _safeJsonDecode(response.body);
 
       if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
-        return BnbStatusResponse.fromJson(decoded);
+        return BnbStatusResponse.fromJson(decoded, fallbackOrderId: orderId);
       } else {
-        final rawError = decoded is Map<String, dynamic> ? decoded['error'] : null;
+        final rawError = decoded is Map<String, dynamic>
+            ? (decoded['message'] ?? decoded['error'])
+            : null;
         throw Exception(ErrorSanitizer.sanitizePayment(rawError ?? 'No se pudo verificar el estado del pago'));
       }
     } catch (e) {

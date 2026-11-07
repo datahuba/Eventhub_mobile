@@ -10,26 +10,30 @@ import 'package:eventhub_mobile/models/order.dart';
 
 void main() {
   group('ApiService Contract & Error Sanitization Tests', () {
-    test('generateBnbQr envía payload correcto y parsea contrato con token y qrBase64', () async {
+    test('generateBnbQr envía payload correcto y parsea contrato canónico PagaYa v1 (HTTP 201)', () async {
       late http.Request capturedRequest;
 
       final mockClient = MockClient((request) async {
         capturedRequest = request;
         return http.Response(
           jsonEncode({
-            'success': true,
             'orderId': 'ord-contract-100',
+            'orderToken': 'jwt.token.order-100',
             'token': 'jwt.token.order-100',
             'qrId': 'mock_qr_100',
             'transactionId': 'tx-100',
+            'reference': 'REF-100',
+            'qrImageBase64': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
             'qrBase64': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+            'amount': 150.0,
             'totalAmount': 150.0,
             'currency': 'BOB',
-            'eventTitle': 'Concierto Rock 2026',
             'tier': 'VIP',
             'quantity': 1,
+            'expiresAt': '2026-11-07T18:30:00.000Z',
+            'success': true,
           }),
-          200,
+          201,
           headers: {'content-type': 'application/json'},
         );
       });
@@ -44,9 +48,9 @@ void main() {
         attendees: [AttendeeInput(name: 'Carlos Siles', ci: '1234567')],
       );
 
-      // Verificación de contrato HTTP
+      // Verificación de contrato HTTP según PagaYa v1 (/api/payments/v1/orders)
       expect(capturedRequest.method, 'POST');
-      expect(capturedRequest.url.path, endsWith('/payments/qr/generate'));
+      expect(capturedRequest.url.path, endsWith('/payments/v1/orders'));
       expect(capturedRequest.headers['content-type'], contains('application/json'));
 
       final payload = jsonDecode(capturedRequest.body) as Map<String, dynamic>;
@@ -56,11 +60,14 @@ void main() {
       expect(payload['attendees'], isA<List>());
       expect((payload['attendees'] as List).length, 1);
 
-      // Verificación de modelo de respuesta
+      // Verificación de modelo de respuesta canónico
       expect(response.success, true);
       expect(response.orderId, 'ord-contract-100');
       expect(response.token, 'jwt.token.order-100');
+      expect(response.orderToken, 'jwt.token.order-100');
       expect(response.qrId, 'mock_qr_100');
+      expect(response.qrBase64, isNotEmpty);
+      expect(response.qrImageBase64, isNotEmpty);
       expect(response.totalAmount, 150.0);
       expect(response.currency, 'BOB');
     });
@@ -139,7 +146,7 @@ void main() {
       );
     });
 
-    test('checkBnbStatus envía orderId, qrId y token de orden en Authorization header y body', () async {
+    test('checkBnbStatus envía orderId en path y token en Authorization Bearer header según PagaYa v1', () async {
       late http.Request capturedRequest;
 
       final mockClient = MockClient((request) async {
@@ -147,11 +154,14 @@ void main() {
         return http.Response(
           jsonEncode({
             'status': 'COMPLETED',
-            'orderId': 'ord-contract-100',
-            'message': 'Pago completado',
-            'attendees': [
-              {'id': 'att-1', 'name': 'Carlos Siles'}
-            ],
+            'paymentStatus': 'COMPLETED',
+            'success': true,
+            'paidAt': '2026-11-07T18:00:00.000Z',
+            'ticketsReady': true,
+            'expiresAt': '2026-11-07T18:15:00.000Z',
+            'amount': 150.0,
+            'totalAmount': 150.0,
+            'currency': 'BOB',
           }),
           200,
           headers: {'content-type': 'application/json'},
@@ -166,14 +176,11 @@ void main() {
       );
 
       expect(capturedRequest.method, 'POST');
-      expect(capturedRequest.url.path, endsWith('/payments/qr/check-status'));
+      expect(capturedRequest.url.path, endsWith('/payments/v1/orders/ord-contract-100/status'));
       expect(capturedRequest.headers['Authorization'], 'Bearer token-auth-order-100');
 
       final body = jsonDecode(capturedRequest.body) as Map<String, dynamic>;
-      expect(body['orderId'], 'ord-contract-100');
       expect(body['qrId'], 'qr-contract-100');
-      expect(body['token'], 'token-auth-order-100');
-      expect(body['orderToken'], 'token-auth-order-100');
 
       expect(response.status, PaymentVerificationStatus.completed);
       expect(response.orderId, 'ord-contract-100');
