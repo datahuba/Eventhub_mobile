@@ -9,6 +9,7 @@ class BnbQrResponse {
   final String eventTitle;
   final String tier;
   final int quantity;
+  final String? expiresAt;
 
   String? get orderToken => token;
   String get qrImageBase64 => qrBase64;
@@ -24,6 +25,7 @@ class BnbQrResponse {
     required this.eventTitle,
     required this.tier,
     required this.quantity,
+    this.expiresAt,
   });
 
   factory BnbQrResponse.fromJson(Map<String, dynamic> json) {
@@ -49,6 +51,7 @@ class BnbQrResponse {
       eventTitle: json['eventTitle']?.toString() ?? '',
       tier: json['tier']?.toString() ?? '',
       quantity: json['quantity'] is int ? json['quantity'] : 1,
+      expiresAt: json['expiresAt']?.toString(),
     );
   }
 }
@@ -66,6 +69,9 @@ class BnbStatusResponse {
   final String? voucherId;
   final String message;
   final List<dynamic>? attendeesRaw;
+  final String? expiresAt;
+  final String? paidAt;
+  final bool? ticketsReady;
 
   BnbStatusResponse({
     required this.status,
@@ -73,6 +79,9 @@ class BnbStatusResponse {
     this.voucherId,
     required this.message,
     this.attendeesRaw,
+    this.expiresAt,
+    this.paidAt,
+    this.ticketsReady,
   });
 
   factory BnbStatusResponse.fromJson(Map<String, dynamic> json, {String? fallbackOrderId}) {
@@ -93,6 +102,9 @@ class BnbStatusResponse {
       voucherId: json['voucherId']?.toString(),
       message: json['message']?.toString() ?? '',
       attendeesRaw: json['attendees'] is List ? json['attendees'] : null,
+      expiresAt: json['expiresAt']?.toString(),
+      paidAt: json['paidAt']?.toString(),
+      ticketsReady: json['ticketsReady'] is bool ? json['ticketsReady'] as bool : null,
     );
   }
 }

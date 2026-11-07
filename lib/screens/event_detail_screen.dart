@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
@@ -16,26 +17,27 @@ class EventDetailScreen extends StatefulWidget {
   static const int defaultMaxQuantity = 10;
 
   /// Retorna el tope máximo de entradas permitido para un sector.
-  /// Si el sector tiene capacity definida, respeta exactamente ese valor (incluso si es 0).
-  /// Si es null o no está definida, aplica el tope global por defecto (10).
+  /// Aplica siempre el tope global máximo de 10 entradas por orden: min(10, capacity).
+  /// Si el sector tiene capacity 0 o menor, retorna 0 (agotado).
+  /// Si capacity es null (sin capacidad especificada), retorna el tope global (10).
   static int maxQuantityForTier(TicketTier? tier) {
     if (tier == null) return defaultMaxQuantity;
     final cap = tier.capacity;
     if (cap != null) {
-      return cap > 0 ? cap : 0;
+      if (cap <= 0) return 0;
+      return math.min(defaultMaxQuantity, cap);
     }
     return defaultMaxQuantity;
   }
 
-  /// Ajusta la cantidad solicitada según la capacidad del nuevo sector.
+  /// Ajusta la cantidad solicitada según la capacidad del nuevo sector aplicando siempre
+  /// el tope global (min(10, capacity)).
   /// Si la capacidad es 0, la cantidad pasa a ser 0.
+  /// Si se cambia a un sector sin capacidad (null), se topa al límite global de 10.
   static int clampQuantityForTier(int currentQuantity, TicketTier? tier) {
-    if (tier == null) return currentQuantity;
-    final maxCap = tier.capacity;
-    if (maxCap != null) {
-      if (maxCap <= 0) return 0;
-      if (currentQuantity > maxCap) return maxCap;
-    }
+    final maxCap = maxQuantityForTier(tier);
+    if (maxCap <= 0) return 0;
+    if (currentQuantity > maxCap) return maxCap;
     return currentQuantity < 1 ? 1 : currentQuantity;
   }
 

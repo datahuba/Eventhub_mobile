@@ -70,6 +70,7 @@ void main() {
       expect(response.qrImageBase64, isNotEmpty);
       expect(response.totalAmount, 150.0);
       expect(response.currency, 'BOB');
+      expect(response.expiresAt, '2026-11-07T18:30:00.000Z');
     });
 
     test('generateBnbQr ante 409 Entradas agotadas arroja mensaje seguro sin detalles técnicos', () async {
@@ -162,6 +163,15 @@ void main() {
             'amount': 150.0,
             'totalAmount': 150.0,
             'currency': 'BOB',
+            'attendees': [
+              {
+                'id': 'att-contract-001',
+                'name': 'Carlos Siles',
+                'ci': '1234567',
+                'qrCode': '29384729102',
+                'productP': '29384729102',
+              }
+            ],
           }),
           200,
           headers: {'content-type': 'application/json'},
@@ -184,6 +194,14 @@ void main() {
 
       expect(response.status, PaymentVerificationStatus.completed);
       expect(response.orderId, 'ord-contract-100');
+      expect(response.paidAt, '2026-11-07T18:00:00.000Z');
+      expect(response.expiresAt, '2026-11-07T18:15:00.000Z');
+      expect(response.ticketsReady, true);
+      expect(response.attendeesRaw, isNotNull);
+      expect(response.attendeesRaw!.length, 1);
+      final firstAtt = response.attendeesRaw!.first as Map<String, dynamic>;
+      expect(firstAtt['id'], 'att-contract-001');
+      expect(firstAtt['productP'], '29384729102');
     });
 
     test('checkBnbStatus ante error 500 del servidor arroja mensaje seguro sin detalles técnicos', () async {

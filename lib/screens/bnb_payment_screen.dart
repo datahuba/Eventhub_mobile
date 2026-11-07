@@ -55,13 +55,28 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   Timer? _countdownTimer;
   late int _secondsRemaining;
 
+  int _calculateSecondsRemaining(BnbQrResponse response) {
+    if (widget.initialSecondsRemaining != null) {
+      return widget.initialSecondsRemaining!;
+    }
+    final expStr = response.expiresAt;
+    if (expStr != null && expStr.isNotEmpty) {
+      try {
+        final expDate = DateTime.parse(expStr);
+        final diff = expDate.difference(DateTime.now()).inSeconds;
+        return diff > 0 ? diff : 0;
+      } catch (_) {}
+    }
+    return 15 * 60;
+  }
+
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _storageService = widget.storageService ?? StorageService();
     _currentBnbResponse = widget.bnbResponse;
-    _secondsRemaining = widget.initialSecondsRemaining ?? (15 * 60);
+    _secondsRemaining = _calculateSecondsRemaining(_currentBnbResponse);
     _decodeQrBase64();
     if (_secondsRemaining <= 0) {
       _isExpired = true;
@@ -147,7 +162,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
             _qrDecodeFailed = false;
             _retryFailed = false;
             _isRetryingQr = false;
-            _secondsRemaining = widget.initialSecondsRemaining ?? (15 * 60);
+            _secondsRemaining = _calculateSecondsRemaining(regenerated);
             _isExpired = false;
           });
           if (_countdownTimer == null) _startCountdown();
