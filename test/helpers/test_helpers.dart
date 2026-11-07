@@ -12,6 +12,7 @@ class FakeApiService extends ApiService {
   String? lastCheckStatusToken;
   PaymentVerificationStatus statusToReturn;
   List<dynamic>? attendeesRawToReturn;
+  bool? ticketsReadyToReturn;
   String? voucherIdToReturn;
   List<Event>? eventsToReturn;
   Duration? checkStatusDelay;
@@ -24,6 +25,7 @@ class FakeApiService extends ApiService {
   FakeApiService({
     this.statusToReturn = PaymentVerificationStatus.expired,
     this.attendeesRawToReturn,
+    this.ticketsReadyToReturn,
     this.eventsToReturn,
     String? voucherId,
     String? voucherIdToReturn,
@@ -80,6 +82,7 @@ class FakeApiService extends ApiService {
       message: 'Status: $statusToReturn',
       attendeesRaw: attendeesRawToReturn,
       voucherId: voucherIdToReturn,
+      ticketsReady: ticketsReadyToReturn,
     );
   }
 }

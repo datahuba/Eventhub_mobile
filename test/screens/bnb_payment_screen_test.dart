@@ -205,7 +205,7 @@ void main() {
 
       // 1er tick de polling automático (4s)
       await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // No debe guardar entradas sintéticas
       expect(fakeStorage.saveTicketsCallCount, 0);
@@ -241,11 +241,61 @@ void main() {
       );
 
       await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(fakeStorage.saveTicketsCallCount, 0);
       expect(find.byType(PaymentSuccessScreen), findsNothing);
       expect(find.textContaining('ORD-12345'), findsOneWidget);
+    });
+
+    testWidgets('cuando statusResp es completed pero ticketsReady es false, mantiene el polling activo y completa al recibir ticketsReady=true', (WidgetTester tester) async {
+      final fakeApi = FakeApiService(
+        statusToReturn: PaymentVerificationStatus.completed,
+        ticketsReadyToReturn: false,
+        attendeesRawToReturn: [],
+      );
+      final fakeStorage = FakeStorageService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Juan Perez', ci: '1234567')],
+            apiService: fakeApi,
+            storageService: fakeStorage,
+            initialSecondsRemaining: 900,
+          ),
+        ),
+      );
+
+      // 1er tick de polling (4s): responde COMPLETED pero ticketsReady=false
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Polling activo, se consultó 1 vez, aún no guarda tickets ni navega
+      expect(fakeApi.checkStatusCallCount, 1);
+      expect(fakeStorage.saveTicketsCallCount, 0);
+      expect(find.byType(PaymentSuccessScreen), findsNothing);
+
+      // Ahora el backend asíncrono tiene las entradas listas
+      fakeApi.ticketsReadyToReturn = true;
+      fakeApi.attendeesRawToReturn = [
+        {
+          'id': 'REAL-ID-001',
+          'qrCode': 'CRYPTOGRAPHIC-DATA-XYZ',
+          'imageUrl': 'https://example.com/ticket.png',
+        }
+      ];
+
+      // 2do tick de polling (4s después): debe volver a consultar automáticamente sin cancelar
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.checkStatusCallCount, 2);
+      expect(fakeStorage.saveTicketsCallCount, 1);
+      expect(find.byType(PaymentSuccessScreen), findsOneWidget);
     });
 
     testWidgets('cuando attendeesRaw es válido y completo, guarda tickets y navega a PaymentSuccessScreen', (WidgetTester tester) async {

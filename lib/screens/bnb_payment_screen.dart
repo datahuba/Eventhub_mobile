@@ -274,7 +274,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         final attendeesRaw = statusResp.attendeesRaw;
         bool isIncomplete = false;
 
-        if (attendeesRaw == null || attendeesRaw.length < widget.attendees.length) {
+        if (statusResp.ticketsReady == false || attendeesRaw == null || attendeesRaw.length < widget.attendees.length) {
           isIncomplete = true;
         } else {
           for (int i = 0; i < widget.attendees.length; i++) {
@@ -292,17 +292,18 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           }
         }
 
-        if (isIncomplete || attendeesRaw == null) {
-          _pollingTimer?.cancel();
-          _pollingTimer = null;
+        if (isIncomplete) {
+          // El pago fue acreditado pero las entradas aún se están procesando de forma asíncrona.
+          // MANTENER el polling activo para seguimiento automático continuo sin cancelarlo.
           if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
                   'El pago fue acreditado pero las entradas aún se están procesando (Orden: ${_currentBnbResponse.orderId}). Por favor reintentá en unos momentos o contactá a soporte.',
                 ),
-                backgroundColor: AppColors.error,
-                duration: const Duration(seconds: 6),
+                backgroundColor: AppColors.warning,
+                duration: const Duration(seconds: 4),
               ),
             );
           }
@@ -319,7 +320,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
 
         for (int i = 0; i < widget.attendees.length; i++) {
           final attInput = widget.attendees[i];
-          final raw = attendeesRaw[i] as Map<String, dynamic>;
+          final raw = attendeesRaw![i] as Map<String, dynamic>;
           final ticketId = raw['id'].toString().trim();
           final qrCode = (raw['productP'] ?? raw['qrCode']).toString().trim();
 

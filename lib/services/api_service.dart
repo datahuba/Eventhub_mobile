@@ -108,9 +108,17 @@ class ApiService {
       final dynamic decoded = _safeJsonDecode(response.body);
 
       if ((response.statusCode == 200 || response.statusCode == 201) &&
-          decoded is Map<String, dynamic> &&
-          (decoded['success'] == true || decoded['orderId'] != null)) {
-        return BnbQrResponse.fromJson(decoded);
+          decoded is Map<String, dynamic>) {
+        final bnbResponse = BnbQrResponse.fromJson(decoded);
+        if (bnbResponse.orderId.trim().isEmpty ||
+            bnbResponse.token == null ||
+            bnbResponse.token!.trim().isEmpty ||
+            bnbResponse.qrBase64.trim().isEmpty) {
+          throw Exception(ErrorSanitizer.sanitizePayment(
+            'Respuesta de orden incompleta: se requieren orderId, token y código QR',
+          ));
+        }
+        return bnbResponse;
       } else {
         final rawError = decoded is Map<String, dynamic>
             ? (decoded['message'] ?? decoded['error'])
@@ -128,6 +136,10 @@ class ApiService {
     String? qrId,
     String? token,
   }) async {
+    if (token == null || token.trim().isEmpty) {
+      throw ArgumentError('Se requiere token de autorización (Bearer) para consultar el estado del pago');
+    }
+
     try {
       final uri = Uri.parse(ApiConfig.checkBnbStatusEndpoint(orderId));
       final body = jsonEncode({
@@ -136,7 +148,7 @@ class ApiService {
 
       final headers = <String, String>{
         'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        'Authorization': 'Bearer $token',
       };
 
       final response = await _client.post(

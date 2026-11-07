@@ -204,6 +204,51 @@ void main() {
       expect(firstAtt['productP'], '29384729102');
     });
 
+    test('generateBnbQr rechaza respuestas incompletas (solo orderId sin token o sin QR) y lanza excepción sanitizada', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'orderId': 'ord-only-id-no-token',
+            'success': true,
+          }),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final api = ApiService(client: mockClient);
+
+      await expectLater(
+        api.generateBnbQr(
+          eventId: 'evt-1',
+          buyerName: 'Carlos Siles',
+          tier: 'VIP',
+          attendees: [AttendeeInput(name: 'Carlos Siles', ci: '1234567')],
+        ),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('checkBnbStatus sin token Bearer no realiza petición HTTP y lanza ArgumentError inmediatamente', () async {
+      var httpRequestMade = false;
+      final mockClient = MockClient((request) async {
+        httpRequestMade = true;
+        return http.Response('{}', 200);
+      });
+
+      final api = ApiService(client: mockClient);
+
+      expect(
+        () => api.checkBnbStatus(orderId: 'ord-123', token: null),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => api.checkBnbStatus(orderId: 'ord-123', token: '   '),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(httpRequestMade, false);
+    });
+
     test('checkBnbStatus ante error 500 del servidor arroja mensaje seguro sin detalles técnicos', () async {
       final mockClient = MockClient((request) async {
         return http.Response(
@@ -216,7 +261,7 @@ void main() {
       final api = ApiService(client: mockClient);
 
       await expectLater(
-        api.checkBnbStatus(orderId: 'ord-1', qrId: 'qr-1'),
+        api.checkBnbStatus(orderId: 'ord-1', qrId: 'qr-1', token: 'valid-test-token'),
         throwsA(predicate((e) {
           final msg = e.toString();
           return !msg.contains('P2034') &&
