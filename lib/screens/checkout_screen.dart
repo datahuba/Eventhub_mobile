@@ -3,6 +3,7 @@ import '../config/theme.dart';
 import '../models/event.dart';
 import '../models/attendee.dart';
 import '../services/api_service.dart';
+import '../utils/error_sanitizer.dart';
 import 'bnb_payment_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -104,10 +105,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
 
+      final userFriendlyMessage = ErrorSanitizer.sanitize(e);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
+          content: Text(userFriendlyMessage),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -298,7 +302,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
                     )
                   : Text(
-                      'Pagar con QR Simple BNB (Bs. ${_totalPrice.toStringAsFixed(2)})',
+                      'Pagar con QR Simple (Bs. ${_totalPrice.toStringAsFixed(2)})',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
             ),

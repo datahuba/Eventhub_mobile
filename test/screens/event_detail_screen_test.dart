@@ -18,12 +18,14 @@ void main() {
       expect(EventDetailScreen.clampQuantityForTier(1, tierVip), 1);
     });
 
-    test('EventDetailScreen.clampQuantityForTier: mantiene la cantidad si la capacidad es null o 0 (sin tope)', () {
+    test('EventDetailScreen.clampQuantityForTier: mantiene la cantidad si la capacidad es null y ajusta a 0 si la capacidad es 0', () {
       final tierUnlimited = TicketTier(name: 'General', price: 100.0, capacity: null);
-      final tierZeroCap = TicketTier(name: 'Libre', price: 50.0, capacity: 0);
+      final tierZeroCap = TicketTier(name: 'Agotado', price: 50.0, capacity: 0);
+      final tierNegativeCap = TicketTier(name: 'Negativo', price: 50.0, capacity: -1);
 
       expect(EventDetailScreen.clampQuantityForTier(7, tierUnlimited), 7);
-      expect(EventDetailScreen.clampQuantityForTier(8, tierZeroCap), 8);
+      expect(EventDetailScreen.clampQuantityForTier(8, tierZeroCap), 0);
+      expect(EventDetailScreen.clampQuantityForTier(5, tierNegativeCap), 0);
       expect(EventDetailScreen.clampQuantityForTier(4, null), 4);
     });
 
@@ -135,17 +137,42 @@ void main() {
   });
 
   group('Issue #8: Tope de entradas según capacidad del sector y fallback global de 10', () {
-    test('EventDetailScreen.maxQuantityForTier: evalúa correctamente capacidades null, 3, 10 y 50', () {
+    test('EventDetailScreen.maxQuantityForTier: evalúa correctamente capacidades aplicando min(10, capacity)', () {
       final tierNull = TicketTier(name: 'General', price: 100.0, capacity: null);
+      final tier0 = TicketTier(name: 'Agotado', price: 50.0, capacity: 0);
       final tier3 = TicketTier(name: 'VIP 3', price: 200.0, capacity: 3);
       final tier10 = TicketTier(name: 'Sector 10', price: 150.0, capacity: 10);
       final tier50 = TicketTier(name: 'Platea 50', price: 80.0, capacity: 50);
 
       expect(EventDetailScreen.maxQuantityForTier(tierNull), 10);
+      expect(EventDetailScreen.maxQuantityForTier(tier0), 0);
       expect(EventDetailScreen.maxQuantityForTier(tier3), 3);
       expect(EventDetailScreen.maxQuantityForTier(tier10), 10);
-      expect(EventDetailScreen.maxQuantityForTier(tier50), 50);
+      expect(EventDetailScreen.maxQuantityForTier(tier50), 10); // min(10, 50) == 10
       expect(EventDetailScreen.maxQuantityForTier(null), 10);
+    });
+
+    test('EventDetailScreen.clampQuantityForTier: aplica min(10, capacity) incluso al cambiar a sector sin capacidad', () {
+      final tierNull = TicketTier(name: 'General', price: 100.0, capacity: null);
+      final tier50 = TicketTier(name: 'Platea 50', price: 80.0, capacity: 50);
+      final tier3 = TicketTier(name: 'VIP 3', price: 200.0, capacity: 3);
+      final tier0 = TicketTier(name: 'Agotado', price: 50.0, capacity: 0);
+
+      // Si la cantidad previa era mayor a 10 y se cambia a sector sin capacidad (null), se topa a 10
+      expect(EventDetailScreen.clampQuantityForTier(15, tierNull), 10);
+
+      // Si la cantidad previa era mayor a 10 y se cambia a sector con capacidad > 10, se topa a 10
+      expect(EventDetailScreen.clampQuantityForTier(20, tier50), 10);
+
+      // Si se cambia a sector con capacidad 3, se topa a 3
+      expect(EventDetailScreen.clampQuantityForTier(7, tier3), 3);
+
+      // Si se cambia a sector agotado (0), pasa a 0
+      expect(EventDetailScreen.clampQuantityForTier(5, tier0), 0);
+
+      // Cantidades normales se mantienen
+      expect(EventDetailScreen.clampQuantityForTier(4, tierNull), 4);
+      expect(EventDetailScreen.clampQuantityForTier(2, tier3), 2);
     });
 
     testWidgets('Widget EventDetailScreen: sector con capacity: 3 permite máximo 3 y muestra SnackBar al intentar superar', (WidgetTester tester) async {
@@ -245,7 +272,7 @@ void main() {
       expect(find.text('Capacidad máxima de General alcanzada'), findsOneWidget);
     });
 
-    testWidgets('Widget EventDetailScreen: sector con capacity: 50 permite superar 10 hasta llegar a 50 y muestra SnackBar', (WidgetTester tester) async {
+    testWidgets('Widget EventDetailScreen: sector con capacity: 50 respeta tope global de 10 (min(10, 50)) y no permite superar 10', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -275,28 +302,66 @@ void main() {
 
       final incrementFinder = find.byIcon(Icons.add_circle_outline);
 
-      // Incrementar hasta 15 (superando el antiguo límite rígido de 10)
-      for (int i = 0; i < 14; i++) {
+      // Incrementar hasta 10 (tope global máximo: min(10, 50))
+      for (int i = 0; i < 9; i++) {
         await tester.tap(incrementFinder);
         await tester.pump();
       }
-      expect(find.text('15'), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
       expect(find.text('Capacidad máxima de Platea alcanzada'), findsNothing);
 
-      // Incrementar hasta 50 (35 veces más)
-      for (int i = 0; i < 35; i++) {
-        await tester.tap(incrementFinder);
-        await tester.pump();
-      }
-      expect(find.text('50'), findsOneWidget);
-      expect(find.text('Capacidad máxima de Platea alcanzada'), findsNothing);
-
-      // Intento de superar 50 -> muestra SnackBar y se queda en 50
+      // Intento de superar 10 -> muestra SnackBar y se queda en 10
       await tester.tap(incrementFinder);
       await tester.pump();
 
-      expect(find.text('50'), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
       expect(find.text('Capacidad máxima de Platea alcanzada'), findsOneWidget);
+    });
+
+    testWidgets('Widget EventDetailScreen: al cambiar entre sectores respeta min(10, capacity) y ajusta cantidad', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final event = Event(
+        id: 'evt-multi-tiers',
+        title: 'Concierto Mixto',
+        subtitle: '',
+        heroImage: '',
+        images: [],
+        startsAt: DateTime.now().add(const Duration(days: 10)),
+        time: '18:00',
+        location: 'Estadio',
+        address: 'Centro',
+        description: ['Varios sectores'],
+        category: 'Música',
+        categoryColor: '#EC3013',
+        tiers: [
+          TicketTier(name: 'General', price: 50.0, capacity: null),
+          TicketTier(name: 'VIP', price: 150.0, capacity: 3),
+        ],
+        pricingNotes: [],
+        isSoldOut: false,
+      );
+
+      await tester.pumpWidget(MaterialApp(home: EventDetailScreen(event: event)));
+      await tester.pumpAndSettle();
+
+      final incrementFinder = find.byIcon(Icons.add_circle_outline);
+
+      // Inicia en General (capacity: null). Incrementar hasta 5
+      for (int i = 0; i < 4; i++) {
+        await tester.tap(incrementFinder);
+        await tester.pump();
+      }
+      expect(find.text('5'), findsOneWidget);
+
+      // Cambiar a VIP (capacity: 3) -> debe clamplear de 5 a 3
+      await tester.tap(find.text('VIP'));
+      await tester.pump();
+
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('Ajustamos la cantidad a 3 por la capacidad de VIP'), findsOneWidget);
     });
   });
 }

@@ -230,9 +230,9 @@ class _EventsScreenState extends State<EventsScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        '${snapshot.error}',
-                        style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
+                      const Text(
+                        'No pudimos conectar con el servidor en este momento. Por favor comprobá tu conexión o intentá nuevamente.',
+                        style: TextStyle(color: AppColors.fgMuted, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 20),
@@ -292,9 +292,6 @@ class _EventsScreenState extends State<EventsScreen> {
               final key = _getMonthYearKey(e.startsAt);
               monthTabs[key] = _getMonthYearLabel(e.startsAt);
             }
-
-            // Aplicar filtros en memoria
-            final filteredEvents = _filterEvents(events);
 
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
