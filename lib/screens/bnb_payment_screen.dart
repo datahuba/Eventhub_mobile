@@ -116,8 +116,8 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         _qrDecodeFailed = false;
         _retryFailed = false;
       }
-    } catch (e) {
-      debugPrint('Error al decodificar Base64 de QR BNB: $e');
+    } catch (_) {
+      debugPrint('Error al decodificar Base64 de QR');
       if (mounted) {
         setState(() {
           _qrBytes = null;
@@ -188,8 +188,8 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         if (_countdownTimer == null && !_isExpired) _startCountdown();
         if (_pollingTimer == null && !_isExpired) _startAutoPolling();
       }
-    } catch (e) {
-      debugPrint('Error al reintentar regenerar/decodificar Base64 de QR BNB: $e');
+    } catch (_) {
+      debugPrint('Error al reintentar regenerar/decodificar Base64 de QR');
       if (mounted) {
         setState(() {
           _qrBytes = null;
