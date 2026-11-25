@@ -134,5 +134,16 @@ void main() {
       final result = ErrorSanitizer.sanitize(null);
       expect(result, 'Ocurrió un problema inesperado. Por favor intentá nuevamente.');
     });
+
+    test('No confunde evento no encontrado con error de catálogo ni orden incompleta con servicio caído', () {
+      final notFound = ErrorSanitizer.sanitizeEvents('El evento solicitado no fue encontrado');
+      expect(notFound, 'El evento solicitado no fue encontrado.');
+
+      final incompleteOrder = ErrorSanitizer.sanitizePayment(
+        'Respuesta de orden incompleta: se requieren orderId, token y código QR',
+      );
+      expect(incompleteOrder, 'No se pudo procesar la orden recibida del servidor. Por favor intentá nuevamente.');
+      expect(incompleteOrder.contains('no está disponible'), false);
+    });
   });
 }

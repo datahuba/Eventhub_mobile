@@ -99,7 +99,7 @@ class BnbStatusResponse {
     return BnbStatusResponse(
       status: parsedStatus,
       orderId: json['orderId']?.toString() ?? fallbackOrderId ?? '',
-      voucherId: json['voucherId']?.toString(),
+      voucherId: (json['voucherId'] ?? json['reference'] ?? json['transactionId'])?.toString(),
       message: json['message']?.toString() ?? '',
       attendeesRaw: json['attendees'] is List ? json['attendees'] : null,
       expiresAt: json['expiresAt']?.toString(),

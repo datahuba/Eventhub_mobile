@@ -149,7 +149,14 @@ class ErrorSanitizer {
       return 'El servicio no está disponible temporalmente. Por favor intentá en unos instantes.';
     }
 
-    // 10. Validaciones específicas de reglas de negocio
+    // 10. Validaciones específicas de reglas de negocio y respuestas incompletas
+    if (raw.contains('respuesta de orden incompleta') || raw.contains('orden incompleta')) {
+      return 'No se pudo procesar la orden recibida del servidor. Por favor intentá nuevamente.';
+    }
+    if ((raw.contains('no fue encontrado') || raw.contains('no encontrado') || raw.contains('not found')) &&
+        raw.contains('evento')) {
+      return 'El evento solicitado no fue encontrado.';
+    }
     if (raw.contains('concluido') || raw.contains('finalizado') || raw.contains('evento pasado')) {
       return 'Este evento ya ha concluido. No se pueden adquirir más entradas.';
     }
