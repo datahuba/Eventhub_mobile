@@ -114,7 +114,7 @@ class _EventsScreenState extends State<EventsScreen> {
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
-    _loadEvents();
+    _eventsFuture = _apiService.getEvents();
   }
 
   @override
@@ -123,10 +123,21 @@ class _EventsScreenState extends State<EventsScreen> {
     super.dispose();
   }
 
-  void _loadEvents() {
+  Future<List<Event>> _loadEvents() {
+    final future = _apiService.getEvents();
     setState(() {
-      _eventsFuture = _apiService.getEvents();
+      _eventsFuture = future;
     });
+    return future;
+  }
+
+  Future<void> _handleRefresh() async {
+    final future = _loadEvents();
+    try {
+      await future;
+    } catch (_) {
+      // FutureBuilder mostrará el estado de error si la recarga falla.
+    }
   }
 
   void _clearAllFilters() {
@@ -172,6 +183,20 @@ class _EventsScreenState extends State<EventsScreen> {
     );
   }
 
+  Widget _buildScrollableCenterState(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: child),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -202,19 +227,20 @@ class _EventsScreenState extends State<EventsScreen> {
       body: RefreshIndicator(
         color: AppColors.accent,
         backgroundColor: AppColors.bg,
-        onRefresh: () async => _loadEvents(),
+        onRefresh: _handleRefresh,
         child: FutureBuilder<List<Event>>(
           future: _eventsFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                (!snapshot.hasData || snapshot.hasError)) {
               return const Center(
                 child: CircularProgressIndicator(color: AppColors.accent),
               );
             }
 
             if (snapshot.hasError) {
-              return Center(
-                child: Padding(
+              return _buildScrollableCenterState(
+                Padding(
                   padding: const EdgeInsets.all(24.0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -253,17 +279,21 @@ class _EventsScreenState extends State<EventsScreen> {
 
             final events = snapshot.data ?? [];
             if (events.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.event_busy, color: AppColors.fgLight, size: 56),
-                    SizedBox(height: 16),
-                    Text(
-                      'No hay eventos programados en este momento.',
-                      style: TextStyle(color: AppColors.fgMuted, fontSize: 15),
-                    ),
-                  ],
+              return _buildScrollableCenterState(
+                const Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.event_busy, color: AppColors.fgLight, size: 56),
+                      SizedBox(height: 16),
+                      Text(
+                        'No hay eventos programados en este momento.',
+                        style: TextStyle(color: AppColors.fgMuted, fontSize: 15),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
               );
             }
@@ -292,9 +322,6 @@ class _EventsScreenState extends State<EventsScreen> {
               final key = _getMonthYearKey(e.startsAt);
               monthTabs[key] = _getMonthYearLabel(e.startsAt);
             }
-
-            // Aplicar filtros en memoria
-            final filteredEvents = _filterEvents(events);
 
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
