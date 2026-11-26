@@ -5,6 +5,22 @@ import '../models/event.dart';
 import '../models/order.dart';
 import '../models/attendee.dart';
 
+/// Excepción HTTP tipada que conserva el código de estado y un mensaje
+/// de negocio opcional sin exponer detalles de transporte en la UI.
+class ApiHttpException implements Exception {
+  final int statusCode;
+  final String? serverMessage;
+
+  const ApiHttpException({
+    required this.statusCode,
+    this.serverMessage,
+  });
+
+  @override
+  String toString() =>
+      'ApiHttpException(statusCode: $statusCode, serverMessage: $serverMessage)';
+}
+
 class ApiService {
   final http.Client _client;
 
@@ -83,38 +99,45 @@ class ApiService {
     required String tier,
     required List<AttendeeInput> attendees,
   }) async {
-    try {
-      final uri = Uri.parse(ApiConfig.generateBnbQrEndpoint);
-      final body = jsonEncode({
-        'eventId': eventId,
-        'buyerName': buyerName,
-        'buyerEmail': buyerEmail ?? '',
-        'buyerPhone': buyerPhone ?? '',
-        'tier': tier,
-        'attendees': attendees.map((a) => a.toJson()).toList(),
-      });
+    final uri = Uri.parse(ApiConfig.generateBnbQrEndpoint);
+    final body = jsonEncode({
+      'eventId': eventId,
+      'buyerName': buyerName,
+      'buyerEmail': buyerEmail ?? '',
+      'buyerPhone': buyerPhone ?? '',
+      'tier': tier,
+      'attendees': attendees.map((a) => a.toJson()).toList(),
+    });
 
-      final response = await _client.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: body,
-      ).timeout(const Duration(seconds: 20));
+    final response = await _client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: body,
+        )
+        .timeout(const Duration(seconds: 20));
 
-      if (response.statusCode >= 500) {
-        throw Exception('El servidor de pagos está temporalmente fuera de servicio (HTTP ${response.statusCode})');
-      }
-
-      final dynamic decoded = _safeJsonDecode(response.body);
-
-      if (response.statusCode == 200 && decoded is Map<String, dynamic> && decoded['success'] == true) {
-        return BnbQrResponse.fromJson(decoded);
-      } else {
-        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'Error al generar el QR de pago';
-        throw Exception(errorMsg ?? 'Error al generar el QR de pago');
-      }
-    } catch (e) {
-      throw Exception('Error en pasarela BNB: $e');
+    if (response.statusCode >= 500) {
+      throw ApiHttpException(statusCode: response.statusCode);
     }
+
+    final dynamic decoded = _safeJsonDecode(response.body);
+
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300 &&
+        decoded is Map<String, dynamic> &&
+        decoded['success'] == true) {
+      return BnbQrResponse.fromJson(decoded);
+    }
+
+    final rawMsg = decoded is Map<String, dynamic>
+        ? (decoded['message'] ?? decoded['error'])?.toString().trim()
+        : null;
+    final statusCode = response.statusCode >= 400 ? response.statusCode : 400;
+    throw ApiHttpException(
+      statusCode: statusCode,
+      serverMessage: (rawMsg != null && rawMsg.isNotEmpty) ? rawMsg : null,
+    );
   }
 
   /// Verifica el estado de acreditación del pago consultando POST /api/payments/bnb/check-status

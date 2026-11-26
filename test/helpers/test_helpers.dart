@@ -17,6 +17,7 @@ class FakeApiService extends ApiService {
   int generateBnbQrCallCount = 0;
   BnbQrResponse? bnbQrResponseToReturn;
   Exception? generateBnbQrException;
+  Object? generateBnbQrError;
 
   FakeApiService({
     this.statusToReturn = PaymentVerificationStatus.expired,
@@ -29,6 +30,7 @@ class FakeApiService extends ApiService {
     this.throwExceptionTimes,
     this.bnbQrResponseToReturn,
     this.generateBnbQrException,
+    this.generateBnbQrError,
   }) : voucherIdToReturn = voucherId ?? voucherIdToReturn;
 
   @override
@@ -41,6 +43,9 @@ class FakeApiService extends ApiService {
     required List<AttendeeInput> attendees,
   }) async {
     generateBnbQrCallCount++;
+    if (generateBnbQrError != null) {
+      throw generateBnbQrError!;
+    }
     if (generateBnbQrException != null) {
       throw generateBnbQrException!;
     }

@@ -1,4 +1,9 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+import 'dart:io' show SocketException;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../config/theme.dart';
 import '../models/event.dart';
 import '../models/attendee.dart';
@@ -9,13 +14,61 @@ class CheckoutScreen extends StatefulWidget {
   final Event event;
   final TicketTier selectedTier;
   final int quantity;
+  final ApiService? apiService;
+  final void Function(Object error, StackTrace stackTrace)? onDebugErrorLog;
 
   const CheckoutScreen({
     super.key,
     required this.event,
     required this.selectedTier,
     required this.quantity,
+    this.apiService,
+    this.onDebugErrorLog,
   });
+
+  /// Convierte excepciones técnicas en mensajes seguros y comprensibles para el usuario.
+  static String sanitizeErrorMessage(Object error) {
+    if (error is SocketException || error is http.ClientException) {
+      return 'Sin conexión. Verificá tu internet e intentá de nuevo.';
+    }
+    if (error is TimeoutException) {
+      return 'La operación tardó demasiado. Intentá de nuevo.';
+    }
+    if (error is ApiHttpException) {
+      if (error.statusCode >= 500) {
+        return 'Error del servidor, intentá más tarde.';
+      }
+      if (error.statusCode >= 400 && error.statusCode < 500) {
+        final msg = error.serverMessage?.trim();
+        if (_isSafeServerMessage(msg)) {
+          return msg!;
+        }
+        return switch (error.statusCode) {
+          400 || 422 => 'Datos inválidos',
+          403 => 'No autorizado',
+          409 => 'Cupo agotado para este sector',
+          _ => 'No se pudo procesar la solicitud. Intentá de nuevo.',
+        };
+      }
+    }
+    return 'Ocurrió un error inesperado. Intentá de nuevo.';
+  }
+
+  static bool _isSafeServerMessage(String? message) {
+    if (message == null || message.isEmpty) return false;
+    final lower = message.toLowerCase();
+    if (lower.contains('http://') ||
+        lower.contains('https://') ||
+        lower.contains('payments/bnb/') ||
+        lower.contains('/api/') ||
+        lower.contains('exception') ||
+        lower.contains('stack') ||
+        message.contains('\n') ||
+        message.contains('\r')) {
+      return false;
+    }
+    return true;
+  }
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
@@ -23,7 +76,7 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
-  final ApiService _apiService = ApiService();
+  late final ApiService _apiService;
 
   // Datos del Comprador
   final TextEditingController _buyerNameController = TextEditingController();
@@ -40,6 +93,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    _apiService = widget.apiService ?? ApiService();
     _attendees = List.generate(widget.quantity, (_) => AttendeeInput.empty());
     _attendeeNameControllers = List.generate(widget.quantity, (_) => TextEditingController());
     _attendeeCiControllers = List.generate(widget.quantity, (_) => TextEditingController());
@@ -100,17 +154,31 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
         ),
       );
-    } catch (e) {
+    } catch (e, st) {
+      _logCheckoutError(e, st);
       if (!mounted) return;
       setState(() => _isLoading = false);
 
+      final userMessage = CheckoutScreen.sanitizeErrorMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
+          content: Text(userMessage),
           backgroundColor: AppColors.error,
         ),
       );
     }
+  }
+
+  void _logCheckoutError(Object error, StackTrace stackTrace) {
+    if (!kDebugMode) return;
+    widget.onDebugErrorLog?.call(error, stackTrace);
+    developer.log(
+      'Error en CheckoutScreen._submitOrder: $error',
+      name: 'CheckoutScreen',
+      error: error,
+      stackTrace: stackTrace,
+    );
+    debugPrint('CheckoutScreen._submitOrder error: $error\n$stackTrace');
   }
 
   @override
