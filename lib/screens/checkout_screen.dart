@@ -15,7 +15,7 @@ class CheckoutScreen extends StatefulWidget {
   final TicketTier selectedTier;
   final int quantity;
   final ApiService? apiService;
-  final void Function(Object error, StackTrace stackTrace)? onDebugErrorLog;
+  final void Function(String maskedError, StackTrace stackTrace)? onDebugErrorLog;
 
   const CheckoutScreen({
     super.key,
@@ -25,6 +25,35 @@ class CheckoutScreen extends StatefulWidget {
     this.apiService,
     this.onDebugErrorLog,
   });
+
+  /// Allowlist explícita de códigos de negocio devueltos por el backend.
+  static const Map<String, String> _allowedErrorCodes = {
+    'INVALID_ATTENDEE_CI': 'El C.I. ingresado no es válido',
+    'INVALID_CI': 'El C.I. ingresado no es válido',
+    'SECTOR_SOLD_OUT': 'Cupo agotado para este sector',
+    'OUT_OF_STOCK': 'Cupo agotado para este sector',
+    'INSUFFICIENT_CAPACITY': 'Cupo agotado para este sector',
+    'EVENT_NOT_FOUND': 'El evento seleccionado ya no está disponible',
+    'EVENT_ENDED': 'Este evento ya finalizó',
+    'INVALID_TIER': 'El sector seleccionado no es válido',
+    'VALIDATION_ERROR': 'Datos inválidos',
+    'UNAUTHORIZED': 'No autorizado',
+    'FORBIDDEN': 'No autorizado',
+  };
+
+  /// Allowlist explícita de mensajes de negocio permitidos en pantalla.
+  static const Map<String, String> _allowedBusinessMessages = {
+    'el c.i. ingresado no es válido': 'El C.I. ingresado no es válido',
+    'cupo agotado para este sector': 'Cupo agotado para este sector',
+    'no quedan entradas disponibles para este sector': 'No quedan entradas disponibles para este sector',
+    'las entradas para este sector están agotadas': 'Cupo agotado para este sector',
+    'el evento seleccionado ya no está disponible': 'El evento seleccionado ya no está disponible',
+    'este evento ya finalizó': 'Este evento ya finalizó',
+    'el sector seleccionado no es válido': 'El sector seleccionado no es válido',
+    'debes ingresar al menos un asistente': 'Debes ingresar al menos un asistente',
+    'datos inválidos': 'Datos inválidos',
+    'no autorizado': 'No autorizado',
+  };
 
   /// Convierte excepciones técnicas en mensajes seguros y comprensibles para el usuario.
   static String sanitizeErrorMessage(Object error) {
@@ -39,9 +68,13 @@ class CheckoutScreen extends StatefulWidget {
         return 'Error del servidor, intentá más tarde.';
       }
       if (error.statusCode >= 400 && error.statusCode < 500) {
-        final msg = error.serverMessage?.trim();
-        if (_isSafeServerMessage(msg)) {
-          return msg!;
+        final codeKey = error.errorCode?.trim().toUpperCase();
+        if (codeKey != null && _allowedErrorCodes.containsKey(codeKey)) {
+          return _allowedErrorCodes[codeKey]!;
+        }
+        final msgKey = error.serverMessage?.trim().toLowerCase();
+        if (msgKey != null && _allowedBusinessMessages.containsKey(msgKey)) {
+          return _allowedBusinessMessages[msgKey]!;
         }
         return switch (error.statusCode) {
           400 || 422 => 'Datos inválidos',
@@ -52,22 +85,6 @@ class CheckoutScreen extends StatefulWidget {
       }
     }
     return 'Ocurrió un error inesperado. Intentá de nuevo.';
-  }
-
-  static bool _isSafeServerMessage(String? message) {
-    if (message == null || message.isEmpty) return false;
-    final lower = message.toLowerCase();
-    if (lower.contains('http://') ||
-        lower.contains('https://') ||
-        lower.contains('payments/bnb/') ||
-        lower.contains('/api/') ||
-        lower.contains('exception') ||
-        lower.contains('stack') ||
-        message.contains('\n') ||
-        message.contains('\r')) {
-      return false;
-    }
-    return true;
   }
 
   @override
@@ -171,14 +188,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   void _logCheckoutError(Object error, StackTrace stackTrace) {
     if (!kDebugMode) return;
-    widget.onDebugErrorLog?.call(error, stackTrace);
+    final maskedError = maskSensitiveData(error.toString());
+    widget.onDebugErrorLog?.call(maskedError, stackTrace);
     developer.log(
-      'Error en CheckoutScreen._submitOrder: $error',
+      'Error en CheckoutScreen._submitOrder: $maskedError',
       name: 'CheckoutScreen',
-      error: error,
+      error: maskedError,
       stackTrace: stackTrace,
     );
-    debugPrint('CheckoutScreen._submitOrder error: $error\n$stackTrace');
+    debugPrint('CheckoutScreen._submitOrder error: $maskedError\n$stackTrace');
   }
 
   @override

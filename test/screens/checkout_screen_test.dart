@@ -22,6 +22,9 @@ void main() {
     expect(displayed, isNot(contains('payments/bnb/generate-qr')));
     expect(displayed, isNot(contains('http://')));
     expect(displayed, isNot(contains('https://')));
+    expect(displayed, isNot(contains('10.0.2.2')));
+    expect(displayed, isNot(contains('SQLSTATE')));
+    expect(displayed.toLowerCase(), isNot(contains('token=')));
     expect(displayed, isNot(contains('Exception')));
     expect(displayed.toLowerCase(), isNot(contains('stack')));
     expect(displayed, isNot(contains('\n')));
@@ -66,17 +69,54 @@ void main() {
         expectedMessage: 'La operación tardó demasiado. Intentá de nuevo.',
       ),
       (
+        name: 'FormatException directa',
+        error: const FormatException('Unexpected character at offset 0: <html>502</html>'),
+        expectedMessage: 'Ocurrió un error inesperado. Intentá de nuevo.',
+      ),
+      (
         name: 'HTTP 400 sin mensaje de servidor',
         error: const ApiHttpException(statusCode: 400),
         expectedMessage: 'Datos inválidos',
       ),
       (
-        name: 'HTTP 400 con mensaje de negocio seguro',
+        name: 'HTTP 400 con código de negocio en allowlist',
+        error: const ApiHttpException(
+          statusCode: 400,
+          errorCode: 'INVALID_ATTENDEE_CI',
+        ),
+        expectedMessage: 'El C.I. ingresado no es válido',
+      ),
+      (
+        name: 'HTTP 400 con mensaje de negocio en allowlist',
         error: const ApiHttpException(
           statusCode: 400,
           serverMessage: 'El C.I. ingresado no es válido',
         ),
         expectedMessage: 'El C.I. ingresado no es válido',
+      ),
+      (
+        name: 'HTTP 400 con host:puerto (10.0.2.2:4000) fuera de allowlist',
+        error: const ApiHttpException(
+          statusCode: 400,
+          serverMessage: 'Conexión rechazada por 10.0.2.2:4000',
+        ),
+        expectedMessage: 'Datos inválidos',
+      ),
+      (
+        name: 'HTTP 400 con SQLSTATE fuera de allowlist',
+        error: const ApiHttpException(
+          statusCode: 400,
+          serverMessage: 'SQLSTATE[23505]: duplicate key value violates unique constraint',
+        ),
+        expectedMessage: 'Datos inválidos',
+      ),
+      (
+        name: 'HTTP 400 con token= fuera de allowlist',
+        error: const ApiHttpException(
+          statusCode: 400,
+          serverMessage: 'Error validando token=super_secreto_123',
+        ),
+        expectedMessage: 'Datos inválidos',
       ),
       (
         name: 'HTTP 400 con mensaje de servidor inseguro (URL y stack)',
@@ -93,8 +133,11 @@ void main() {
         expectedMessage: 'Datos inválidos',
       ),
       (
-        name: 'HTTP 403 sin mensaje de servidor',
-        error: const ApiHttpException(statusCode: 403),
+        name: 'HTTP 403 con mensaje técnico Bearer fuera de allowlist',
+        error: const ApiHttpException(
+          statusCode: 403,
+          serverMessage: 'Invalid Bearer eyJhbGciOiJIUzI1NiJ9.aaa.bbb',
+        ),
         expectedMessage: 'No autorizado',
       ),
       (
@@ -143,18 +186,19 @@ void main() {
       });
     }
 
-    testWidgets('registra la excepción completa en el log de diagnóstico en debug sin exponerla en el SnackBar', (WidgetTester tester) async {
+    testWidgets('enmascara tokens y PII en el log de diagnóstico en debug sin exponerlos en el SnackBar', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
       final originalDebugPrint = debugPrint;
       final capturedDebugPrints = <String>[];
-      Object? loggedError;
+      String? loggedMaskedError;
       StackTrace? loggedStack;
-      final rawError = http.ClientException(
-        'Connection failed',
-        Uri.parse('http://10.0.2.2:4000/api/payments/bnb/generate-qr'),
+      const rawError = ApiHttpException(
+        statusCode: 400,
+        serverMessage:
+            'Fallo en token=secreto_999 email=usuario@test.com Bearer abcdef12345 ci=8877665',
       );
       final fakeApi = FakeApiService(generateBnbQrError: rawError);
       final dummyEvent = createDummyEvent();
@@ -173,8 +217,8 @@ void main() {
               selectedTier: dummyEvent.tiers.first,
               quantity: 1,
               apiService: fakeApi,
-              onDebugErrorLog: (error, stackTrace) {
-                loggedError = error;
+              onDebugErrorLog: (maskedError, stackTrace) {
+                loggedMaskedError = maskedError;
                 loggedStack = stackTrace;
               },
             ),
@@ -186,37 +230,47 @@ void main() {
         debugPrint = originalDebugPrint;
       }
 
-      // SnackBar sanitizado
-      assertSnackBarSanitized(
-        tester,
-        'Sin conexión. Verificá tu internet e intentá de nuevo.',
-      );
+      // SnackBar sanitizado mediante allowlist
+      assertSnackBarSanitized(tester, 'Datos inválidos');
 
-      // Log de diagnóstico recibe la excepción completa y el stack trace
-      expect(loggedError, same(rawError));
+      // El log conserva el código HTTP para diagnóstico, pero enmascara tokens y PII
+      expect(loggedMaskedError, isNotNull);
+      expect(loggedMaskedError, contains('statusCode: 400'));
+      expect(loggedMaskedError, contains('[REDACTED]'));
+      expect(loggedMaskedError, contains('[REDACTED_EMAIL]'));
+      expect(loggedMaskedError, isNot(contains('secreto_999')));
+      expect(loggedMaskedError, isNot(contains('usuario@test.com')));
+      expect(loggedMaskedError, isNot(contains('abcdef12345')));
+      expect(loggedMaskedError, isNot(contains('8877665')));
       expect(loggedStack, isNotNull);
+
       expect(
         capturedDebugPrints.any(
-          (msg) => msg.contains('payments/bnb/generate-qr') && msg.contains('Connection failed'),
+          (msg) =>
+              msg.contains('statusCode: 400') &&
+              !msg.contains('secreto_999') &&
+              !msg.contains('usuario@test.com') &&
+              !msg.contains('abcdef12345') &&
+              !msg.contains('8877665'),
         ),
         isTrue,
       );
     });
   });
 
-  group('ApiService.generateBnbQr preserva excepciones tipadas', () {
-    test('lanza ApiHttpException(409) con mensaje de negocio cuando el backend responde 409', () async {
+  group('ApiService.generateBnbQr preserva excepciones tipadas y códigos HTTP', () {
+    test('lanza ApiHttpException(409) con mensaje cuando el backend responde 409 JSON', () async {
       final mockClient = MockClient((request) async {
         return http.Response(
-          jsonEncode({'message': 'No quedan entradas en VIP'}),
+          jsonEncode({'code': 'SECTOR_SOLD_OUT', 'message': 'Cupo agotado para este sector'}),
           409,
           headers: {'content-type': 'application/json'},
         );
       });
       final api = ApiService(client: mockClient);
 
-      expect(
-        () => api.generateBnbQr(
+      await expectLater(
+        api.generateBnbQr(
           eventId: 'evt-1',
           buyerName: 'Juan',
           tier: 'VIP',
@@ -225,9 +279,39 @@ void main() {
         throwsA(
           isA<ApiHttpException>()
               .having((e) => e.statusCode, 'statusCode', 409)
-              .having((e) => e.serverMessage, 'serverMessage', 'No quedan entradas en VIP'),
+              .having((e) => e.errorCode, 'errorCode', 'SECTOR_SOLD_OUT')
+              .having((e) => e.serverMessage, 'serverMessage', 'Cupo agotado para este sector'),
         ),
       );
+    });
+
+    test('lanza ApiHttpException con el código real en respuestas 4xx sin JSON', () async {
+      for (final testCase in [
+        (code: 400, body: 'Bad Request'),
+        (code: 403, body: '<html><body>Forbidden</body></html>'),
+        (code: 404, body: ''),
+        (code: 409, body: 'Conflict'),
+        (code: 422, body: 'Unprocessable Entity'),
+      ]) {
+        final mockClient = MockClient((request) async {
+          return http.Response(testCase.body, testCase.code);
+        });
+        final api = ApiService(client: mockClient);
+
+        await expectLater(
+          api.generateBnbQr(
+            eventId: 'evt-1',
+            buyerName: 'Juan',
+            tier: 'General',
+            attendees: [],
+          ),
+          throwsA(
+            isA<ApiHttpException>()
+                .having((e) => e.statusCode, 'statusCode', testCase.code)
+                .having((e) => e.serverMessage, 'serverMessage', isNull),
+          ),
+        );
+      }
     });
 
     test('lanza ApiHttpException(500) cuando el backend responde 500', () async {
@@ -236,8 +320,8 @@ void main() {
       });
       final api = ApiService(client: mockClient);
 
-      expect(
-        () => api.generateBnbQr(
+      await expectLater(
+        api.generateBnbQr(
           eventId: 'evt-1',
           buyerName: 'Juan',
           tier: 'General',
@@ -249,20 +333,75 @@ void main() {
       );
     });
 
-    test('propaga SocketException y ClientException sin envolverlas en Exception genérica', () async {
+    test('preserva FormatException en respuestas 2xx con JSON malformado o no objeto', () async {
+      final invalidJsonClient = MockClient((request) async {
+        return http.Response('<html>OK</html>', 200);
+      });
+      await expectLater(
+        ApiService(client: invalidJsonClient).generateBnbQr(
+          eventId: 'evt-1',
+          buyerName: 'Juan',
+          tier: 'General',
+          attendees: [],
+        ),
+        throwsA(isA<FormatException>()),
+      );
+
+      final nonMapJsonClient = MockClient((request) async {
+        return http.Response('[]', 200);
+      });
+      await expectLater(
+        ApiService(client: nonMapJsonClient).generateBnbQr(
+          eventId: 'evt-1',
+          buyerName: 'Juan',
+          tier: 'General',
+          attendees: [],
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('propaga SocketException, ClientException y TimeoutException sin envolverlas', () async {
       final socketClient = MockClient((request) async {
         throw const SocketException('Network is unreachable');
       });
-      final api = ApiService(client: socketClient);
-
       await expectLater(
-        api.generateBnbQr(
+        ApiService(client: socketClient).generateBnbQr(
           eventId: 'evt-1',
           buyerName: 'Juan',
           tier: 'General',
           attendees: [],
         ),
         throwsA(isA<SocketException>()),
+      );
+
+      final httpClientError = MockClient((request) async {
+        throw http.ClientException(
+          'Connection refused',
+          Uri.parse('http://10.0.2.2:4000/api/payments/bnb/generate-qr'),
+        );
+      });
+      await expectLater(
+        ApiService(client: httpClientError).generateBnbQr(
+          eventId: 'evt-1',
+          buyerName: 'Juan',
+          tier: 'General',
+          attendees: [],
+        ),
+        throwsA(isA<http.ClientException>()),
+      );
+
+      final timeoutClient = MockClient((request) async {
+        throw TimeoutException('Request timed out');
+      });
+      await expectLater(
+        ApiService(client: timeoutClient).generateBnbQr(
+          eventId: 'evt-1',
+          buyerName: 'Juan',
+          tier: 'General',
+          attendees: [],
+        ),
+        throwsA(isA<TimeoutException>()),
       );
     });
   });
