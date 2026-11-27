@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:eventhub_mobile/models/event.dart';
 import 'package:eventhub_mobile/screens/events_screen.dart';
+import 'package:eventhub_mobile/widgets/event_card.dart';
 import '../helpers/test_helpers.dart';
 
 void main() {
@@ -168,6 +170,199 @@ void main() {
       expect(find.text('Concierto Futuro Pop'), findsOneWidget);
       expect(find.text('Torneo Deportivo Futuro'), findsOneWidget);
       expect(find.text('Festival Pasado Rock'), findsNothing);
+    });
+  });
+
+  group('Issue #35: Pull-to-refresh y reintento tras error en EventsScreen', () {
+    Event buildEvent({
+      required String id,
+      required String title,
+      String category = 'Conciertos',
+      String location = 'La Paz',
+    }) {
+      return Event(
+        id: id,
+        title: title,
+        subtitle: 'En vivo',
+        heroImage: '',
+        images: [],
+        startsAt: DateTime.now().add(const Duration(days: 7)),
+        time: '20:00',
+        location: location,
+        address: 'Av. Principal',
+        description: ['Descripción de prueba'],
+        category: category,
+        categoryColor: '#EC3013',
+        tiers: [TicketTier(name: 'General', price: 100.0)],
+        pricingNotes: [],
+        isSoldOut: false,
+      );
+    }
+
+    testWidgets('muestra botón Reintentar tras fallo en getEvents() y carga EventCards al presionarlo', (WidgetTester tester) async {
+      final secondCallCompleter = Completer<List<Event>>();
+      final fakeApi = FakeApiService();
+      fakeApi.getEventsHandler = () {
+        if (fakeApi.getEventsCallCount == 1) {
+          return Future.error(Exception('timeout'));
+        }
+        return secondCallCompleter.future;
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EventsScreen(apiService: fakeApi),
+        ),
+      );
+
+      // Resolver primera llamada con error
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.getEventsCallCount, 1);
+      expect(find.text('No se pudieron cargar los eventos'), findsOneWidget);
+      expect(find.text('Reintentar'), findsOneWidget);
+      expect(find.byIcon(Icons.refresh), findsOneWidget);
+
+      // Presionar Reintentar -> muestra CircularProgressIndicator mientras recarga
+      await tester.tap(find.text('Reintentar'));
+      await tester.pump();
+
+      expect(fakeApi.getEventsCallCount, 2);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      // Completar segunda llamada con 2 eventos
+      secondCallCompleter.complete([
+        buildEvent(id: 'evt-1', title: 'Concierto Uno'),
+        buildEvent(id: 'evt-2', title: 'Concierto Dos'),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EventCard), findsNWidgets(2));
+      expect(find.text('Concierto Uno'), findsOneWidget);
+      expect(find.text('Concierto Dos'), findsOneWidget);
+    });
+
+    testWidgets('pull-to-refresh tras carga exitosa vuelve a invocar getEvents() preservando búsqueda y categoría', (WidgetTester tester) async {
+      final fakeApi = FakeApiService();
+      fakeApi.getEventsHandler = () async {
+        if (fakeApi.getEventsCallCount == 1) {
+          return [
+            buildEvent(id: '1', title: 'Noche de Rock Inicial', category: 'Conciertos'),
+            buildEvent(id: '2', title: 'Obra Clásica', category: 'Teatro'),
+          ];
+        }
+        return [
+          buildEvent(id: '1', title: 'Noche de Rock Actualizada', category: 'Conciertos'),
+          buildEvent(id: '3', title: 'Otro Rock En Vivo', category: 'Conciertos'),
+          buildEvent(id: '4', title: 'Partido Nocturno', category: 'Deportes'),
+        ];
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EventsScreen(apiService: fakeApi),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.getEventsCallCount, 1);
+      expect(find.text('Noche de Rock Inicial'), findsOneWidget);
+      expect(find.text('Obra Clásica'), findsOneWidget);
+
+      // Aplicar filtros activos: _searchQuery = 'rock' y categoría = 'Conciertos'
+      await tester.enterText(find.byType(TextField), 'rock');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Conciertos'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Noche de Rock Inicial'), findsOneWidget);
+      expect(find.text('Obra Clásica'), findsNothing);
+
+      // Ejecutar pull-to-refresh deslizando hacia abajo
+      await tester.fling(find.byType(ListView).first, const Offset(0, 300), 1000);
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.getEventsCallCount, 2);
+
+      // Lista actualizada con los filtros preservados
+      expect(find.text('Noche de Rock Actualizada'), findsOneWidget);
+      expect(find.text('Otro Rock En Vivo'), findsOneWidget);
+      expect(find.text('Partido Nocturno'), findsNothing);
+
+      // El texto escrito en _searchController sigue mostrándose y el chip sigue seleccionado
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.controller?.text, 'rock');
+      final conciertosChip = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, 'Conciertos'),
+      );
+      expect(conciertosChip.selected, isTrue);
+    });
+
+    testWidgets('durante el pull-to-refresh el RefreshProgressIndicator nativo es visible y desaparece al resolver el Future', (WidgetTester tester) async {
+      final refreshCompleter = Completer<List<Event>>();
+      final fakeApi = FakeApiService();
+      fakeApi.getEventsHandler = () {
+        if (fakeApi.getEventsCallCount == 1) {
+          return Future.value([
+            buildEvent(id: '1', title: 'Evento Base'),
+          ]);
+        }
+        return refreshCompleter.future;
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EventsScreen(apiService: fakeApi),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RefreshProgressIndicator), findsNothing);
+
+      // Iniciar gesto pull-to-refresh sin resolver aún el Completer
+      await tester.fling(find.byType(ListView).first, const Offset(0, 350), 1000);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(fakeApi.getEventsCallCount, 2);
+      expect(find.byType(RefreshProgressIndicator), findsOneWidget);
+
+      // Resolver el Future de recarga
+      refreshCompleter.complete([
+        buildEvent(id: '1', title: 'Evento Base'),
+        buildEvent(id: '2', title: 'Evento Nuevo'),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RefreshProgressIndicator), findsNothing);
+      expect(find.text('Evento Nuevo'), findsOneWidget);
+    });
+
+    testWidgets('pull-to-refresh también funciona cuando el catálogo está vacío', (WidgetTester tester) async {
+      final fakeApi = FakeApiService();
+      fakeApi.getEventsHandler = () async {
+        if (fakeApi.getEventsCallCount == 1) {
+          return [];
+        }
+        return [
+          buildEvent(id: '1', title: 'Primer Evento Publicado'),
+        ];
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EventsScreen(apiService: fakeApi),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('No hay eventos programados en este momento.'), findsOneWidget);
+
+      await tester.fling(find.byType(SingleChildScrollView), const Offset(0, 350), 1000);
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.getEventsCallCount, 2);
+      expect(find.text('Primer Evento Publicado'), findsOneWidget);
     });
   });
 }
