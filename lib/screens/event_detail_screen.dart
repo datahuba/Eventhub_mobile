@@ -62,7 +62,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   void _selectTier(TicketTier tier) {
-    if (_selectedTier?.name == tier.name) return;
+    if (_selectedTier != null && _selectedTier!.isSameTier(tier)) return;
 
     final prevQuantity = _quantity;
     final clampedQuantity = EventDetailScreen.clampQuantityForTier(prevQuantity, tier);
@@ -438,7 +438,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     ...event.tiers.map(
                       (tier) => TierSelectorChip(
                         tier: tier,
-                        isSelected: _selectedTier?.name == tier.name,
+                        isSelected: _selectedTier != null && _selectedTier!.isSameTier(tier),
                         onTap: () => _selectTier(tier),
                       ),
                     ),

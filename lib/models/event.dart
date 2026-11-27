@@ -2,33 +2,75 @@ import 'package:intl/intl.dart';
 import '../config/api_config.dart';
 
 class TicketTier {
+  final String? id;
   final String name;
   final double price;
   final int? capacity;
 
   TicketTier({
+    this.id,
     required this.name,
     required this.price,
     this.capacity,
   });
 
-  factory TicketTier.fromJson(String name, dynamic priceValue, dynamic capacityValue) {
-    double price = 0.0;
+  /// Indica si ambos objetos representan el mismo sector/tier.
+  /// Compara por [id] cuando ambos están presentes y usa [identical] como fallback.
+  bool isSameTier(TicketTier other) {
+    if (identical(this, other)) return true;
+    final currentId = id?.trim();
+    final otherId = other.id?.trim();
+    if (currentId != null &&
+        currentId.isNotEmpty &&
+        otherId != null &&
+        otherId.isNotEmpty) {
+      return currentId == otherId;
+    }
+    return false;
+  }
+
+  static double _parsePrice(dynamic priceValue) {
     if (priceValue is num) {
-      price = priceValue.toDouble();
-    } else if (priceValue is String) {
-      price = double.tryParse(priceValue) ?? 0.0;
+      return priceValue.toDouble();
     }
-
-    int? capacity;
-    if (capacityValue is int) {
-      capacity = capacityValue;
+    if (priceValue is String) {
+      return double.tryParse(priceValue) ?? 0.0;
     }
+    return 0.0;
+  }
 
+  static int? _parseCapacity(dynamic capacityValue) {
+    if (capacityValue is int) return capacityValue;
+    if (capacityValue is num) return capacityValue.toInt();
+    if (capacityValue is String) return int.tryParse(capacityValue);
+    return null;
+  }
+
+  static String? _parseId(dynamic idValue) {
+    final raw = idValue?.toString().trim();
+    return (raw != null && raw.isNotEmpty) ? raw : null;
+  }
+
+  factory TicketTier.fromJson(
+    String name,
+    dynamic priceValue,
+    dynamic capacityValue, {
+    dynamic idValue,
+  }) {
     return TicketTier(
+      id: _parseId(idValue),
       name: name,
-      price: price,
-      capacity: capacity,
+      price: _parsePrice(priceValue),
+      capacity: _parseCapacity(capacityValue),
+    );
+  }
+
+  factory TicketTier.fromMap(Map<String, dynamic> map) {
+    return TicketTier(
+      id: _parseId(map['id']),
+      name: map['name']?.toString() ?? 'General',
+      price: _parsePrice(map['price']),
+      capacity: _parseCapacity(map['capacity']),
     );
   }
 }
@@ -176,18 +218,34 @@ class Event {
         ? rawNotes.map((e) => e.toString()).toList()
         : [];
 
-    // Mapear pricingTiers y tierCapacities
+    // Mapear ticketTypes (lista con id explícito) o pricingTiers + tierCapacities
     final List<TicketTier> parsedTiers = [];
+    final rawTicketTypes = json['ticketTypes'] ?? json['tiers'];
+    if (rawTicketTypes is List) {
+      for (final item in rawTicketTypes) {
+        if (item is Map<String, dynamic>) {
+          parsedTiers.add(TicketTier.fromMap(item));
+        }
+      }
+    }
+
     final rawPricingTiers = json['pricingTiers'];
     final rawTierCapacities = json['tierCapacities'];
+    final rawTierIds = json['tierIds'];
 
-    if (rawPricingTiers is Map<String, dynamic>) {
+    if (parsedTiers.isEmpty && rawPricingTiers is Map<String, dynamic>) {
       rawPricingTiers.forEach((tierName, priceVal) {
         dynamic capVal;
         if (rawTierCapacities is Map<String, dynamic>) {
           capVal = rawTierCapacities[tierName];
         }
-        parsedTiers.add(TicketTier.fromJson(tierName, priceVal, capVal));
+        dynamic idVal;
+        if (rawTierIds is Map<String, dynamic>) {
+          idVal = rawTierIds[tierName];
+        }
+        parsedTiers.add(
+          TicketTier.fromJson(tierName, priceVal, capVal, idValue: idVal),
+        );
       });
     }
 
