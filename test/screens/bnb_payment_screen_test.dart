@@ -1,14 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:eventhub_mobile/models/attendee.dart';
 import 'package:eventhub_mobile/models/event.dart';
 import 'package:eventhub_mobile/models/order.dart';
-import 'package:eventhub_mobile/models/ticket.dart';
 import 'package:eventhub_mobile/screens/bnb_payment_screen.dart';
 import 'package:eventhub_mobile/screens/payment_success_screen.dart';
-import 'package:eventhub_mobile/services/api_service.dart';
 import 'package:eventhub_mobile/widgets/bnb_countdown_badge.dart';
-import 'package:eventhub_mobile/widgets/bnb_qr_container.dart';
 import '../helpers/test_helpers.dart';
 
 void main() {
@@ -637,6 +635,175 @@ void main() {
       expect(find.byType(BnbCountdownBadge), findsOneWidget);
       final payButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Ya realicé el pago'));
       expect(payButton.onPressed, isNotNull);
+    });
+  });
+
+  group('Issue #34: _regenerateQr sin fallback divergente para attendees vacío', () {
+    testWidgets('con attendees vacío y bnbResponse válido, dispara assert en debug sin decodificar QR, iniciar timers ni llamar a generateBnbQr', (WidgetTester tester) async {
+      final fakeApi = FakeApiService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: const [],
+            apiService: fakeApi,
+            initialSecondsRemaining: 0,
+          ),
+        ),
+      );
+
+      final dynamic state = tester.state(find.byType(BnbPaymentScreen));
+      final initialBytes = state.qrBytesForTest;
+      final initialPollingActive = state.hasActivePollingTimerForTest;
+      final initialCountdownActive = state.hasActiveCountdownTimerForTest;
+      expect(initialBytes, isNotNull);
+      expect(initialCountdownActive, isFalse);
+
+      await expectLater(
+        () => state.regenerateQrForTest(),
+        throwsAssertionError,
+      );
+
+      expect(fakeApi.generateBnbQrCallCount, 0);
+      expect(identical(state.qrBytesForTest, initialBytes), isTrue);
+      expect(state.hasActivePollingTimerForTest, initialPollingActive);
+      expect(state.hasActiveCountdownTimerForTest, isFalse);
+    });
+
+    testWidgets('con attendees vacío simulando modo release, lanza StateError con mensaje acordado, muestra mensaje en UI y no toca timers ni API', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(qrBase64: '### INVALID BASE64 ###'),
+            attendees: const [],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      final dynamic state = tester.state(find.byType(BnbPaymentScreen));
+      expect(state.qrBytesForTest, isNull);
+      expect(state.hasActivePollingTimerForTest, isFalse);
+      expect(state.hasActiveCountdownTimerForTest, isFalse);
+
+      await expectLater(
+        () => state.regenerateQrForTest(simulateRelease: true),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'No se puede regenerar el QR sin asistentes; el flujo de Checkout siempre los provee.',
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(fakeApi.generateBnbQrCallCount, 0);
+      expect(state.qrBytesForTest, isNull);
+      expect(state.hasActivePollingTimerForTest, isFalse);
+      expect(state.hasActiveCountdownTimerForTest, isFalse);
+      expect(
+        find.text('No se pudo regenerar el pago. Volvé a iniciar la compra.'),
+        findsAtLeastNWidgets(1),
+      );
+    });
+
+    testWidgets('con attendees no vacío y SocketException en ApiService, setea _qrDecodeFailed=true y _retryFailed=true sin fallback silencioso', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final fakeApi = FakeApiService(
+        generateBnbQrException: const SocketException('Sin conexión a internet'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(qrBase64: '### INVALID BASE64 ###'),
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+          ),
+        ),
+      );
+
+      final dynamic state = tester.state(find.byType(BnbPaymentScreen));
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Reintentar'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.generateBnbQrCallCount, 1);
+      expect(state.isQrDecodeFailedForTest, isTrue);
+      expect(state.isRetryFailedForTest, isTrue);
+      expect(state.qrBytesForTest, isNull);
+      expect(find.byType(Image), findsNothing);
+      expect(
+        find.text('Reintento fallido. Probá más tarde o contactá a soporte.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('regeneración exitosa con attendees no vacío registra log con orderId y secondsRemaining', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final originalDebugPrint = debugPrint;
+      final logs = <String>[];
+      final fakeApi = FakeApiService(
+        bnbQrResponseToReturn: createDummyBnbResponse(),
+      );
+
+      debugPrint = (String? message, {int? wrapWidth}) {
+        if (message != null) logs.add(message);
+      };
+
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BnbPaymentScreen(
+              event: createDummyEvent(),
+              selectedTier: TicketTier(name: 'General', price: 100.0),
+              bnbResponse: createDummyBnbResponse(qrBase64: '### INVALID BASE64 ###'),
+              attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+              apiService: fakeApi,
+              initialSecondsRemaining: 900,
+            ),
+          ),
+        );
+
+        await tester.tap(find.widgetWithText(ElevatedButton, 'Reintentar'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+      } finally {
+        debugPrint = originalDebugPrint;
+      }
+
+      expect(fakeApi.generateBnbQrCallCount, 1);
+      expect(find.byType(Image), findsOneWidget);
+      expect(
+        logs.any(
+          (line) =>
+              line.contains('BNB QR regenerado: orderId=ORD-12345') &&
+              line.contains('secondsRemaining='),
+        ),
+        isTrue,
+      );
     });
   });
 }

@@ -8,6 +8,7 @@ class BnbQrContainer extends StatelessWidget {
   final VoidCallback? onRetry;
   final bool isRetrying;
   final bool retryFailed;
+  final String? retryErrorMessage;
 
   const BnbQrContainer({
     super.key,
@@ -16,6 +17,7 @@ class BnbQrContainer extends StatelessWidget {
     this.onRetry,
     this.isRetrying = false,
     this.retryFailed = false,
+    this.retryErrorMessage,
   });
 
   @override
@@ -80,9 +82,9 @@ class BnbQrContainer extends StatelessWidget {
                     ),
                     if (retryFailed) ...[
                       const SizedBox(height: 10),
-                      const Text(
-                        'Reintento fallido. Probá más tarde o contactá a soporte.',
-                        style: TextStyle(
+                      Text(
+                        retryErrorMessage ?? 'Reintento fallido. Probá más tarde o contactá a soporte.',
+                        style: const TextStyle(
                           color: AppColors.error,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,

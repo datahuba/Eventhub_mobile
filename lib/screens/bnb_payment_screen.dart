@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
 import '../models/event.dart';
@@ -47,6 +47,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   bool _isExpired = false;
   bool _qrDecodeFailed = false;
   bool _retryFailed = false;
+  String? _retryErrorMessage;
   bool _isRetryingQr = false;
   int _consecutivePollFailures = 0;
   Timer? _pollingTimer;
@@ -112,70 +113,123 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
     }
   }
 
-  Future<void> _regenerateQr() async {
+  @visibleForTesting
+  Future<void> regenerateQrForTest({bool simulateRelease = false}) =>
+      _regenerateQr(enforceAssert: !simulateRelease);
+
+  @visibleForTesting
+  Uint8List? get qrBytesForTest => _qrBytes;
+
+  @visibleForTesting
+  bool get isQrDecodeFailedForTest => _qrDecodeFailed;
+
+  @visibleForTesting
+  bool get isRetryFailedForTest => _retryFailed;
+
+  @visibleForTesting
+  bool get hasActivePollingTimerForTest => _pollingTimer?.isActive ?? false;
+
+  @visibleForTesting
+  bool get hasActiveCountdownTimerForTest => _countdownTimer?.isActive ?? false;
+
+  /// Regenera el código QR solicitando **siempre** una nueva orden en el backend
+  /// mediante `ApiService.generateBnbQr`.
+  ///
+  /// `widget.bnbResponse.qrBase64` se utiliza únicamente en la decodificación inicial
+  /// y se ignora tras el primer decode; nunca existe un fallback local sin backend.
+  Future<void> _regenerateQr({bool enforceAssert = true}) async {
     if (_isRetryingQr) return;
+
+    if (enforceAssert) {
+      assert(
+        widget.attendees.isNotEmpty,
+        'No se puede regenerar el QR sin asistentes; el flujo de Checkout siempre los provee.',
+      );
+    }
+
+    if (widget.attendees.isEmpty) {
+      const errorMsg = 'No se pudo regenerar el pago. Volvé a iniciar la compra.';
+      if (mounted) {
+        setState(() {
+          _isRetryingQr = false;
+          _retryFailed = true;
+          _retryErrorMessage = errorMsg;
+        });
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      } else {
+        _isRetryingQr = false;
+        _retryFailed = true;
+        _retryErrorMessage = errorMsg;
+      }
+      throw StateError(
+        'No se puede regenerar el QR sin asistentes; el flujo de Checkout siempre los provee.',
+      );
+    }
+
     if (mounted) {
       setState(() {
         _isRetryingQr = true;
         _retryFailed = false;
+        _retryErrorMessage = null;
       });
     } else {
       _isRetryingQr = true;
       _retryFailed = false;
+      _retryErrorMessage = null;
     }
 
     try {
-      if (widget.attendees.isNotEmpty) {
-        final regenerated = await _apiService.generateBnbQr(
-          eventId: widget.event.id,
-          buyerName: widget.attendees.first.name,
-          tier: widget.selectedTier.name,
-          attendees: widget.attendees,
+      final regenerated = await _apiService.generateBnbQr(
+        eventId: widget.event.id,
+        buyerName: widget.attendees.first.name,
+        tier: widget.selectedTier.name,
+        attendees: widget.attendees,
+      );
+      if (kDebugMode) {
+        debugPrint(
+          'BNB QR regenerado: orderId=${regenerated.orderId}, secondsRemaining=$_secondsRemaining',
         );
-        String cleanBase64 = regenerated.qrBase64.trim();
-        if (cleanBase64.contains(',')) {
-          cleanBase64 = cleanBase64.split(',').last;
-        }
-        final decoded = base64Decode(cleanBase64);
-        if (mounted) {
-          setState(() {
-            _qrBytes = decoded;
-            _qrDecodeFailed = false;
-            _retryFailed = false;
-            _isRetryingQr = false;
-          });
-          if (_countdownTimer == null && !_isExpired) _startCountdown();
-          if (_pollingTimer == null && !_isExpired) _startAutoPolling();
-        }
-        return;
       }
-
-      String raw = widget.bnbResponse.qrBase64.trim();
-      if (raw.contains(',')) raw = raw.split(',').last;
-      String sanitized = raw.replaceAll(RegExp(r'\s+'), '');
-      while (sanitized.length % 4 != 0) {
-        sanitized += '=';
+      String cleanBase64 = regenerated.qrBase64.trim();
+      if (cleanBase64.contains(',')) {
+        cleanBase64 = cleanBase64.split(',').last;
       }
-      final decoded = base64Decode(sanitized);
+      final decoded = base64Decode(cleanBase64);
       if (mounted) {
         setState(() {
           _qrBytes = decoded;
           _qrDecodeFailed = false;
           _retryFailed = false;
+          _retryErrorMessage = null;
           _isRetryingQr = false;
         });
         if (_countdownTimer == null && !_isExpired) _startCountdown();
         if (_pollingTimer == null && !_isExpired) _startAutoPolling();
       }
     } catch (e) {
-      debugPrint('Error al reintentar regenerar/decodificar Base64 de QR BNB: $e');
+      if (kDebugMode) {
+        debugPrint('Error al reintentar regenerar/decodificar Base64 de QR BNB: $e');
+      }
       if (mounted) {
         setState(() {
           _qrBytes = null;
           _qrDecodeFailed = true;
           _retryFailed = true;
+          _retryErrorMessage = null;
           _isRetryingQr = false;
         });
+      } else {
+        _qrBytes = null;
+        _qrDecodeFailed = true;
+        _retryFailed = true;
+        _retryErrorMessage = null;
+        _isRetryingQr = false;
       }
     }
   }
@@ -529,6 +583,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           onRetry: _regenerateQr,
           isRetrying: _isRetryingQr,
           retryFailed: _retryFailed,
+          retryErrorMessage: _retryErrorMessage,
         ),
         const SizedBox(height: 20),
 
