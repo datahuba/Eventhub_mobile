@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:eventhub_mobile/models/event.dart';
 import 'package:eventhub_mobile/screens/event_detail_screen.dart';
 import 'package:eventhub_mobile/widgets/event_bottom_purchase_bar.dart';
+import 'package:eventhub_mobile/widgets/tier_chip.dart';
 
 void main() {
   group('Issue #7: Reajuste de cantidad de entradas al cambiar de sector', () {
@@ -362,6 +363,269 @@ void main() {
 
       expect(find.text('3'), findsOneWidget);
       expect(find.text('Ajustamos la cantidad a 3 por la capacidad de VIP'), findsOneWidget);
+    });
+  });
+
+  group('Issue #36: Selección de TicketTier con nombres duplicados', () {
+    test('TicketTier parsea id String/int/null y resuelve isSameTier con fallback a identical', () {
+      final tierStringId = TicketTier.fromMap({
+        'id': 'tier-day-1',
+        'name': 'General',
+        'price': 100,
+        'capacity': 50,
+      });
+      final tierIntId = TicketTier.fromMap({
+        'id': 2,
+        'name': 'General',
+        'price': 150,
+        'capacity': 20,
+      });
+      final tierDuplicateSameId = TicketTier.fromMap({
+        'id': 'tier-day-1',
+        'name': 'General',
+        'price': 100,
+      });
+      final tierNoIdA = TicketTier(name: 'General', price: 100.0);
+      final tierNoIdB = TicketTier(name: 'General', price: 100.0);
+
+      expect(tierStringId.id, 'tier-day-1');
+      expect(tierIntId.id, '2');
+      expect(tierNoIdA.id, isNull);
+
+      expect(tierStringId.isSameTier(tierStringId), isTrue);
+      expect(tierStringId.isSameTier(tierDuplicateSameId), isTrue);
+      expect(tierStringId.isSameTier(tierIntId), isFalse);
+      expect(tierNoIdA.isSameTier(tierNoIdA), isTrue);
+      expect(tierNoIdA.isSameTier(tierNoIdB), isFalse);
+
+      final parsedEvent = Event.fromJson({
+        'id': 'evt-json-tiers',
+        'title': 'Festival 2 Días',
+        'startsAt': DateTime.now().add(const Duration(days: 5)).toIso8601String(),
+        'ticketTypes': [
+          {'id': 1, 'name': 'General', 'price': 100, 'capacity': 10},
+          {'id': 'tier-2', 'name': 'General', 'price': 150, 'capacity': 3},
+        ],
+      });
+      expect(parsedEvent.tiers.length, 2);
+      expect(parsedEvent.tiers[0].id, '1');
+      expect(parsedEvent.tiers[0].price, 100.0);
+      expect(parsedEvent.tiers[1].id, 'tier-2');
+      expect(parsedEvent.tiers[1].price, 150.0);
+    });
+
+    testWidgets('permite seleccionar entre dos TicketTier con mismo name (price 100 y 150) y actualiza subtotal en EventBottomPurchaseBar', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final duplicateNameEvent = Event(
+        id: 'evt-dup-names',
+        title: 'Concierto Dos Fechas',
+        subtitle: 'Día 1 y Día 2',
+        heroImage: '',
+        images: [],
+        startsAt: DateTime.now().add(const Duration(days: 5)),
+        time: '20:00',
+        location: 'Teatro al Aire Libre',
+        address: 'Av. del Poeta',
+        description: ['Dos fechas disponibles'],
+        category: 'Música',
+        categoryColor: '#EC3013',
+        tiers: [
+          TicketTier(name: 'General', price: 100.0, capacity: 10),
+          TicketTier(name: 'General', price: 150.0, capacity: 8),
+        ],
+        pricingNotes: [],
+        isSoldOut: false,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: EventDetailScreen(event: duplicateNameEvent)),
+      );
+      await tester.pumpAndSettle();
+
+      // Incrementar cantidad a 2 -> subtotal inicial 2 * 100 = Bs. 200.00
+      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byType(EventBottomPurchaseBar),
+          matching: find.text('Bs. 200.00'),
+        ),
+        findsOneWidget,
+      );
+
+      // Tocar el segundo card ('General' de Bs. 150.00)
+      await tester.tap(find.text('Bs. 150.00'));
+      await tester.pumpAndSettle();
+
+      // Subtotal actualizado a 2 * 150 = Bs. 300.00
+      expect(
+        find.descendant(
+          of: find.byType(EventBottomPurchaseBar),
+          matching: find.text('Bs. 300.00'),
+        ),
+        findsOneWidget,
+      );
+
+      // Solo el segundo TierSelectorChip debe estar seleccionado
+      final chips = tester.widgetList<TierSelectorChip>(find.byType(TierSelectorChip)).toList();
+      expect(chips.length, 2);
+      expect(chips[0].isSelected, isFalse);
+      expect(chips[1].isSelected, isTrue);
+    });
+
+    testWidgets('dos taps consecutivos al mismo objeto TicketTier no disparan cambios ni SnackBar duplicado de ajuste', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final event = Event(
+        id: 'evt-same-tap',
+        title: 'Show Doble',
+        subtitle: '',
+        heroImage: '',
+        images: [],
+        startsAt: DateTime.now().add(const Duration(days: 5)),
+        time: '20:00',
+        location: 'Coliseo',
+        address: 'Centro',
+        description: ['Desc'],
+        category: 'Música',
+        categoryColor: '#EC3013',
+        tiers: [
+          TicketTier(name: 'General', price: 100.0, capacity: 10),
+          TicketTier(name: 'General', price: 150.0, capacity: 2),
+        ],
+        pricingNotes: [],
+        isSoldOut: false,
+      );
+
+      await tester.pumpWidget(MaterialApp(home: EventDetailScreen(event: event)));
+      await tester.pumpAndSettle();
+
+      // Subir cantidad a 4 en el primer tier
+      final inc = find.byIcon(Icons.add_circle_outline);
+      await tester.tap(inc);
+      await tester.tap(inc);
+      await tester.tap(inc);
+      await tester.pumpAndSettle();
+      expect(find.text('4'), findsOneWidget);
+
+      // 1er tap al segundo tier (capacity: 2) -> ajusta cantidad a 2 y muestra 1 SnackBar
+      await tester.tap(find.text('Bs. 150.00'));
+      await tester.pump();
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('Ajustamos la cantidad a 2 por la capacidad de General'), findsOneWidget);
+
+      // Esperar a que complete la animación de entrada, expire el SnackBar (3s) y salga
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsNothing);
+
+      // 2do tap consecutivo sobre el MISMO objeto TicketTier -> no muestra SnackBar ni altera estado
+      await tester.tap(find.text('Bs. 150.00'));
+      await tester.pump();
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text('2'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(EventBottomPurchaseBar),
+          matching: find.text('Bs. 300.00'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('cambiar a otro tier con mismo name actualiza la capacity usada por _incrementQuantity y _decrementQuantity', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final event = Event(
+        id: 'evt-cap-dup',
+        title: 'Festival Por Días',
+        subtitle: '',
+        heroImage: '',
+        images: [],
+        startsAt: DateTime.now().add(const Duration(days: 5)),
+        time: '19:00',
+        location: 'Estadio',
+        address: 'Av. Principal',
+        description: ['Desc'],
+        category: 'Música',
+        categoryColor: '#EC3013',
+        tiers: [
+          TicketTier(id: 'day-1', name: 'General', price: 100.0, capacity: 5),
+          TicketTier(id: 'day-2', name: 'General', price: 150.0, capacity: 2),
+        ],
+        pricingNotes: [],
+        isSoldOut: false,
+      );
+
+      await tester.pumpWidget(MaterialApp(home: EventDetailScreen(event: event)));
+      await tester.pumpAndSettle();
+
+      // Seleccionar el segundo tier ('General', price: 150, capacity: 2)
+      await tester.tap(find.text('Bs. 150.00'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(EventBottomPurchaseBar),
+          matching: find.text('Bs. 150.00'),
+        ),
+        findsOneWidget,
+      );
+
+      final inc = find.byIcon(Icons.add_circle_outline);
+      final dec = find.byIcon(Icons.remove_circle_outline);
+
+      // Incrementar a 2 (permitido por capacity: 2)
+      await tester.tap(inc);
+      await tester.pump();
+      expect(find.text('2'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(EventBottomPurchaseBar),
+          matching: find.text('Bs. 300.00'),
+        ),
+        findsOneWidget,
+      );
+
+      // Intentar incrementar a 3 -> bloqueado por capacity: 2 del segundo tier
+      await tester.tap(inc);
+      await tester.pump();
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('Capacidad máxima de General alcanzada'), findsOneWidget);
+
+      // Decrementar a 1 -> subtotal regresa a Bs. 150.00
+      await tester.tap(dec);
+      await tester.pump();
+      expect(find.text('1'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(EventBottomPurchaseBar),
+          matching: find.text('Bs. 150.00'),
+        ),
+        findsOneWidget,
+      );
+
+      // Volver al primer tier ('General', price: 100, capacity: 5) -> permite subir a 3
+      await tester.tap(find.text('Bs. 100.00'));
+      await tester.pumpAndSettle();
+      await tester.tap(inc);
+      await tester.tap(inc);
+      await tester.pump();
+      expect(find.text('3'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(EventBottomPurchaseBar),
+          matching: find.text('Bs. 300.00'),
+        ),
+        findsOneWidget,
+      );
     });
   });
 }

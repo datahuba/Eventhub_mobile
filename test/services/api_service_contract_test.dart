@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:eventhub_mobile/services/api_service.dart';
+import 'package:eventhub_mobile/screens/checkout_screen.dart';
 import 'package:eventhub_mobile/models/attendee.dart';
 import 'package:eventhub_mobile/models/order.dart';
 
@@ -73,7 +74,7 @@ void main() {
       expect(response.expiresAt, '2026-11-07T18:30:00.000Z');
     });
 
-    test('generateBnbQr ante 409 Entradas agotadas arroja mensaje seguro sin detalles técnicos', () async {
+    test('generateBnbQr ante 409 Entradas agotadas arroja ApiHttpException(409) y CheckoutScreen la sanitiza sin detalles técnicos', () async {
       final mockClient = MockClient((request) async {
         return http.Response(
           jsonEncode({
@@ -94,13 +95,14 @@ void main() {
           attendees: [AttendeeInput(name: 'Pedro', ci: '1234567')],
         ),
         throwsA(predicate((e) {
-          final msg = e.toString();
+          if (e is! ApiHttpException || e.statusCode != 409) return false;
+          final msg = CheckoutScreen.sanitizeErrorMessage(e);
           return msg.contains('agotado') && !msg.contains('409') && !msg.contains('status');
         })),
       );
     });
 
-    test('generateBnbQr ante fallo de conexión (SocketException / ClientException) no expone hosts ni puertos', () async {
+    test('generateBnbQr ante fallo de conexión (SocketException / ClientException) preserva excepción y CheckoutScreen no expone hosts ni puertos', () async {
       final mockClient = MockClient((request) async {
         throw const SocketException('Connection refused, errno = 111, address = 10.0.2.2, port = 4000');
       });
@@ -115,18 +117,19 @@ void main() {
           attendees: [AttendeeInput(name: 'Usuario', ci: '1234567')],
         ),
         throwsA(predicate((e) {
-          final msg = e.toString();
+          if (e is! SocketException) return false;
+          final msg = CheckoutScreen.sanitizeErrorMessage(e);
           final noLeak = !msg.contains('10.0.2.2') &&
               !msg.contains('4000') &&
               !msg.contains('errno') &&
               !msg.contains('SocketException');
-          final isFriendly = msg.contains('conexión a internet');
+          final isFriendly = msg.toLowerCase().contains('conexión') || msg.toLowerCase().contains('internet');
           return noLeak && isFriendly;
         })),
       );
     });
 
-    test('generateBnbQr ante TimeoutException arroja mensaje amigable de tiempo de espera', () async {
+    test('generateBnbQr ante TimeoutException preserva excepción y CheckoutScreen arroja mensaje amigable de tiempo de espera', () async {
       final mockClient = MockClient((request) async {
         throw TimeoutException('Future not completed after 0:00:20.000000');
       });
@@ -141,7 +144,8 @@ void main() {
           attendees: [AttendeeInput(name: 'Usuario', ci: '1234567')],
         ),
         throwsA(predicate((e) {
-          final msg = e.toString();
+          if (e is! TimeoutException) return false;
+          final msg = CheckoutScreen.sanitizeErrorMessage(e);
           return msg.contains('tardó demasiado') && !msg.contains('0:00:20');
         })),
       );
