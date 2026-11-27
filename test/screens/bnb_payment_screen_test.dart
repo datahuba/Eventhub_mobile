@@ -1,14 +1,17 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:eventhub_mobile/config/api_config.dart';
 import 'package:eventhub_mobile/models/attendee.dart';
 import 'package:eventhub_mobile/models/event.dart';
 import 'package:eventhub_mobile/models/order.dart';
-import 'package:eventhub_mobile/models/ticket.dart';
 import 'package:eventhub_mobile/screens/bnb_payment_screen.dart';
 import 'package:eventhub_mobile/screens/payment_success_screen.dart';
 import 'package:eventhub_mobile/services/api_service.dart';
 import 'package:eventhub_mobile/widgets/bnb_countdown_badge.dart';
-import 'package:eventhub_mobile/widgets/bnb_qr_container.dart';
 import '../helpers/test_helpers.dart';
 
 void main() {
@@ -637,6 +640,192 @@ void main() {
       expect(find.byType(BnbCountdownBadge), findsOneWidget);
       final payButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Ya realicé el pago'));
       expect(payButton.onPressed, isNotNull);
+    });
+  });
+
+  group('Issue #38: Cancelación de orden en dispose de BnbPaymentScreen', () {
+    testWidgets('al disponer BnbPaymentScreen sin completar pago ni expirar, invoca cancelOrder exactamente una vez con el orderId correcto', (WidgetTester tester) async {
+      final fakeApi = FakeApiService(statusToReturn: PaymentVerificationStatus.pending);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Juan Perez', ci: '1234567')],
+            apiService: fakeApi,
+            initialSecondsRemaining: 900,
+          ),
+        ),
+      );
+
+      // Verificar que el state está montado y aún no se ha cancelado la orden
+      expect(tester.state(find.byType(BnbPaymentScreen)), isNotNull);
+      expect(fakeApi.cancelOrderCallCount, 0);
+
+      // Desmontar la pantalla (ejecuta state.dispose()) sin haber completado pago
+      await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.cancelOrderCallCount, 1);
+      expect(fakeApi.cancelledOrderIds, ['ORD-12345']);
+    });
+
+    testWidgets('al presionar el botón cerrar (Navigator.pop) antes de pagar, cancela la orden pendiente', (WidgetTester tester) async {
+      final fakeApi = FakeApiService(statusToReturn: PaymentVerificationStatus.pending);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => BnbPaymentScreen(
+                        event: createDummyEvent(),
+                        selectedTier: TicketTier(name: 'General', price: 100.0),
+                        bnbResponse: createDummyBnbResponse(),
+                        attendees: [AttendeeInput(name: 'Juan Perez', ci: '1234567')],
+                        apiService: fakeApi,
+                        initialSecondsRemaining: 900,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Ir a pago'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Ir a pago'));
+      await tester.pumpAndSettle();
+      expect(fakeApi.cancelOrderCallCount, 0);
+
+      // Tocar el botón X de la AppBar para abandonar sin pagar
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.cancelOrderCallCount, 1);
+      expect(fakeApi.cancelledOrderIds, ['ORD-12345']);
+    });
+
+    testWidgets('cuando _paymentCompleted es true al navegar a PaymentSuccessScreen, dispose NO invoca cancelOrder', (WidgetTester tester) async {
+      final fakeApi = FakeApiService(
+        statusToReturn: PaymentVerificationStatus.completed,
+        attendeesRawToReturn: [
+          {
+            'id': 'REAL-ID-789',
+            'qrCode': 'SIGNED-CRYPTOGRAPHIC-DATA-XYZ',
+          },
+        ],
+        voucherId: 'VOUCHER-555',
+      );
+      final fakeStorage = FakeStorageService();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Juan Perez', ci: '1234567')],
+            apiService: fakeApi,
+            storageService: fakeStorage,
+            initialSecondsRemaining: 900,
+          ),
+        ),
+      );
+
+      // El polling confirma pago, setea _paymentCompleted = true y hace pushReplacement (dispone BnbPaymentScreen)
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PaymentSuccessScreen), findsOneWidget);
+      expect(fakeApi.cancelOrderCallCount, 0);
+      expect(fakeApi.cancelledOrderIds, isEmpty);
+
+      // Desmontar todo el árbol tampoco dispara cancelación
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(fakeApi.cancelOrderCallCount, 0);
+    });
+
+    testWidgets('cuando _isExpired es true (inicial o por backend), dispose NO invoca cancelOrder', (WidgetTester tester) async {
+      // Caso A: pantalla creada ya expirada (initialSecondsRemaining: 0)
+      final fakeApiInitialExpired = FakeApiService(
+        statusToReturn: PaymentVerificationStatus.pending,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Juan Perez', ci: '1234567')],
+            apiService: fakeApiInitialExpired,
+            initialSecondsRemaining: 0,
+          ),
+        ),
+      );
+
+      expect(find.text('Código QR Vencido'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(fakeApiInitialExpired.cancelOrderCallCount, 0);
+
+      // Caso B: expiración detectada por respuesta del backend
+      final fakeApiBackendExpired = FakeApiService(
+        statusToReturn: PaymentVerificationStatus.expired,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: createDummyBnbResponse(),
+            attendees: [AttendeeInput(name: 'Juan Perez', ci: '1234567')],
+            apiService: fakeApiBackendExpired,
+            initialSecondsRemaining: 900,
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(find.text('Código QR Vencido'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(fakeApiBackendExpired.cancelOrderCallCount, 0);
+    });
+
+    test('ApiService.cancelOrder envía POST al endpoint de cancelación y no lanza excepción ante fallos', () async {
+      late Uri capturedUri;
+      late String capturedMethod;
+      late Map<String, dynamic> capturedBody;
+
+      final okClient = MockClient((request) async {
+        capturedUri = request.url;
+        capturedMethod = request.method;
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(jsonEncode({'success': true}), 200);
+      });
+
+      await ApiService(client: okClient).cancelOrder('ORD-999');
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.toString(), ApiConfig.cancelBnbOrderEndpoint);
+      expect(capturedBody['orderId'], 'ORD-999');
+
+      // Ante 404, 500 o SocketException, fire-and-forget no propaga excepción
+      final notFoundClient = MockClient((_) async => http.Response('Not Found', 404));
+      await expectLater(ApiService(client: notFoundClient).cancelOrder('ORD-999'), completes);
+
+      final socketFailClient = MockClient((_) async => throw const SocketException('Offline'));
+      await expectLater(ApiService(client: socketFailClient).cancelOrder('ORD-999'), completes);
     });
   });
 }
