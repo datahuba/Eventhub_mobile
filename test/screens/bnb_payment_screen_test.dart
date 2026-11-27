@@ -800,10 +800,162 @@ void main() {
         logs.any(
           (line) =>
               line.contains('BNB QR regenerado: orderId=ORD-12345') &&
-              line.contains('secondsRemaining='),
+              line.contains('secondsRemaining=900'),
         ),
         isTrue,
       );
+    });
+
+    testWidgets('al regenerar con IDs distintos, actualiza orden activa, reinicia contador y usa nuevos IDs en polling y tickets', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final initialResponse = createDummyBnbResponse(
+        orderId: 'ORD-OLD-001',
+        qrId: 'QR-OLD-001',
+        qrBase64: '### INVALID BASE64 ###',
+        totalAmount: 100.0,
+      );
+      final regeneratedResponse = createDummyBnbResponse(
+        orderId: 'ORD-NEW-999',
+        qrId: 'QR-NEW-999',
+        totalAmount: 180.0,
+      );
+
+      final fakeApi = FakeApiService(
+        statusToReturn: PaymentVerificationStatus.pending,
+        bnbQrResponseToReturn: regeneratedResponse,
+      );
+      final fakeStorage = FakeStorageService();
+
+      final originalDebugPrint = debugPrint;
+      final logs = <String>[];
+      debugPrint = (String? message, {int? wrapWidth}) {
+        if (message != null) logs.add(message);
+      };
+
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BnbPaymentScreen(
+              event: createDummyEvent(),
+              selectedTier: TicketTier(name: 'General', price: 180.0),
+              bnbResponse: initialResponse,
+              attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+              apiService: fakeApi,
+              storageService: fakeStorage,
+              initialSecondsRemaining: 12,
+            ),
+          ),
+        );
+
+        final dynamic state = tester.state(find.byType(BnbPaymentScreen));
+        expect(state.activeBnbResponseForTest.orderId, 'ORD-OLD-001');
+        expect(state.secondsRemainingForTest, 12);
+
+        // Regenerar orden vía botón Reintentar
+        await tester.tap(find.widgetWithText(ElevatedButton, 'Reintentar'));
+        await tester.pump();
+        await tester.pump();
+
+        // Orden activa, UI y contador actualizados al instante con los nuevos datos
+        expect(state.activeBnbResponseForTest.orderId, 'ORD-NEW-999');
+        expect(state.activeBnbResponseForTest.qrId, 'QR-NEW-999');
+        expect(state.secondsRemainingForTest, 900);
+        expect(find.text('Tiempo restante: 15:00'), findsOneWidget);
+        expect(find.text('Bs. 180.00'), findsOneWidget);
+        expect(
+          logs.any(
+            (line) => line.contains('BNB QR regenerado: orderId=ORD-NEW-999, secondsRemaining=900'),
+          ),
+          isTrue,
+        );
+
+        // 1er poll (4s) -> consulta con orderId y qrId regenerados
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pump();
+        expect(fakeApi.checkStatusCalls.length, 1);
+        expect(fakeApi.checkStatusCalls.first.orderId, 'ORD-NEW-999');
+        expect(fakeApi.checkStatusCalls.first.qrId, 'QR-NEW-999');
+
+        // 2do poll (4s) con pago completado -> emite ticket con el orderId regenerado
+        fakeApi.statusToReturn = PaymentVerificationStatus.completed;
+        fakeApi.attendeesRawToReturn = [
+          {
+            'id': 'REAL-TICKET-999',
+            'qrCode': 'SIGNED-CRYPTO-999',
+          },
+        ];
+
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+
+        expect(fakeApi.checkStatusCalls.last.orderId, 'ORD-NEW-999');
+        expect(fakeApi.checkStatusCalls.last.qrId, 'QR-NEW-999');
+        expect(fakeStorage.savedTickets.length, 1);
+        expect(fakeStorage.savedTickets.single.orderId, 'ORD-NEW-999');
+        expect(find.byType(PaymentSuccessScreen), findsOneWidget);
+      } finally {
+        debugPrint = originalDebugPrint;
+      }
+    });
+
+    testWidgets('recalcula expiración según expiresInSeconds de la orden regenerada y muestra nuevo orderId al expirar', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final initialResponse = createDummyBnbResponse(
+        orderId: 'ORD-OLD-001',
+        qrId: 'QR-OLD-001',
+        qrBase64: '### INVALID BASE64 ###',
+      );
+      final regeneratedResponse = createDummyBnbResponse(
+        orderId: 'ORD-NEW-888',
+        qrId: 'QR-NEW-888',
+        expiresInSeconds: 2,
+      );
+
+      final fakeApi = FakeApiService(
+        statusToReturn: PaymentVerificationStatus.pending,
+        bnbQrResponseToReturn: regeneratedResponse,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BnbPaymentScreen(
+            event: createDummyEvent(),
+            selectedTier: TicketTier(name: 'General', price: 100.0),
+            bnbResponse: initialResponse,
+            attendees: [AttendeeInput(name: 'Carlos Perez', ci: '1234567')],
+            apiService: fakeApi,
+            initialSecondsRemaining: 600,
+          ),
+        ),
+      );
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Reintentar'));
+      await tester.pump();
+      await tester.pump();
+
+      final dynamic state = tester.state(find.byType(BnbPaymentScreen));
+      expect(state.secondsRemainingForTest, 2);
+      expect(find.text('Tiempo restante: 00:02'), findsOneWidget);
+
+      // Transcurren 2 segundos -> la orden regenerada expira y muestra su orderId
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Código QR Vencido'), findsOneWidget);
+      expect(find.text('ORD-NEW-888'), findsOneWidget);
+      expect(find.text('ORD-OLD-001'), findsNothing);
+
+      // Polling detenido tras expirar
+      final callsAtExpiry = fakeApi.checkStatusCallCount;
+      await tester.pump(const Duration(seconds: 4));
+      expect(fakeApi.checkStatusCallCount, callsAtExpiry);
     });
   });
 }
