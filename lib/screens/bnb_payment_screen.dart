@@ -12,6 +12,7 @@ import '../services/storage_service.dart';
 import '../widgets/bnb_countdown_badge.dart';
 import '../widgets/bnb_expired_view.dart';
 import '../widgets/bnb_qr_container.dart';
+import '../utils/error_sanitizer.dart';
 import 'payment_success_screen.dart';
 
 class BnbPaymentScreen extends StatefulWidget {
@@ -41,6 +42,7 @@ class BnbPaymentScreen extends StatefulWidget {
 class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   late final ApiService _apiService;
   late final StorageService _storageService;
+  late BnbQrResponse _currentBnbResponse;
 
   Uint8List? _qrBytes;
   bool _isChecking = false;
@@ -53,12 +55,28 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   Timer? _countdownTimer;
   late int _secondsRemaining;
 
+  int _calculateSecondsRemaining(BnbQrResponse response) {
+    if (widget.initialSecondsRemaining != null) {
+      return widget.initialSecondsRemaining!;
+    }
+    final expStr = response.expiresAt;
+    if (expStr != null && expStr.isNotEmpty) {
+      try {
+        final expDate = DateTime.parse(expStr);
+        final diff = expDate.difference(DateTime.now()).inSeconds;
+        return diff > 0 ? diff : 0;
+      } catch (_) {}
+    }
+    return 15 * 60;
+  }
+
   @override
   void initState() {
     super.initState();
     _apiService = widget.apiService ?? ApiService();
     _storageService = widget.storageService ?? StorageService();
-    _secondsRemaining = widget.initialSecondsRemaining ?? (15 * 60);
+    _currentBnbResponse = widget.bnbResponse;
+    _secondsRemaining = _calculateSecondsRemaining(_currentBnbResponse);
     _decodeQrBase64();
     if (_secondsRemaining <= 0) {
       _isExpired = true;
@@ -82,7 +100,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
 
   void _decodeQrBase64() {
     try {
-      String cleanBase64 = widget.bnbResponse.qrBase64.trim();
+      String cleanBase64 = _currentBnbResponse.qrBase64.trim();
       if (cleanBase64.contains(',')) {
         cleanBase64 = cleanBase64.split(',').last;
       }
@@ -98,8 +116,8 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         _qrDecodeFailed = false;
         _retryFailed = false;
       }
-    } catch (e) {
-      debugPrint('Error al decodificar Base64 de QR BNB: $e');
+    } catch (_) {
+      debugPrint('Error al decodificar Base64 de QR');
       if (mounted) {
         setState(() {
           _qrBytes = null;
@@ -139,18 +157,21 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         final decoded = base64Decode(cleanBase64);
         if (mounted) {
           setState(() {
+            _currentBnbResponse = regenerated;
             _qrBytes = decoded;
             _qrDecodeFailed = false;
             _retryFailed = false;
             _isRetryingQr = false;
+            _secondsRemaining = _calculateSecondsRemaining(regenerated);
+            _isExpired = false;
           });
-          if (_countdownTimer == null && !_isExpired) _startCountdown();
-          if (_pollingTimer == null && !_isExpired) _startAutoPolling();
+          if (_countdownTimer == null) _startCountdown();
+          if (_pollingTimer == null) _startAutoPolling();
         }
         return;
       }
 
-      String raw = widget.bnbResponse.qrBase64.trim();
+      String raw = _currentBnbResponse.qrBase64.trim();
       if (raw.contains(',')) raw = raw.split(',').last;
       String sanitized = raw.replaceAll(RegExp(r'\s+'), '');
       while (sanitized.length % 4 != 0) {
@@ -167,8 +188,8 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         if (_countdownTimer == null && !_isExpired) _startCountdown();
         if (_pollingTimer == null && !_isExpired) _startAutoPolling();
       }
-    } catch (e) {
-      debugPrint('Error al reintentar regenerar/decodificar Base64 de QR BNB: $e');
+    } catch (_) {
+      debugPrint('Error al reintentar regenerar/decodificar Base64 de QR');
       if (mounted) {
         setState(() {
           _qrBytes = null;
@@ -234,8 +255,9 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
 
     try {
       final statusResp = await _apiService.checkBnbStatus(
-        orderId: widget.bnbResponse.orderId,
-        qrId: widget.bnbResponse.qrId,
+        orderId: _currentBnbResponse.orderId,
+        qrId: _currentBnbResponse.qrId,
+        token: _currentBnbResponse.token,
       );
 
       if (_consecutivePollFailures > 0) {
@@ -252,7 +274,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         final attendeesRaw = statusResp.attendeesRaw;
         bool isIncomplete = false;
 
-        if (attendeesRaw == null || attendeesRaw.length < widget.attendees.length) {
+        if (statusResp.ticketsReady == false || attendeesRaw == null || attendeesRaw.length < widget.attendees.length) {
           isIncomplete = true;
         } else {
           for (int i = 0; i < widget.attendees.length; i++) {
@@ -270,17 +292,18 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           }
         }
 
-        if (isIncomplete || attendeesRaw == null) {
-          _pollingTimer?.cancel();
-          _pollingTimer = null;
+        if (isIncomplete) {
+          // El pago fue acreditado pero las entradas aún se están procesando de forma asíncrona.
+          // MANTENER el polling activo para seguimiento automático continuo sin cancelarlo.
           if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'El pago fue acreditado pero las entradas aún se están procesando (Orden: ${widget.bnbResponse.orderId}). Por favor reintentá en unos momentos o contactá a soporte.',
+                  'El pago fue acreditado pero las entradas aún se están procesando (Orden: ${_currentBnbResponse.orderId}). Por favor reintentá en unos momentos o contactá a soporte.',
                 ),
-                backgroundColor: AppColors.error,
-                duration: const Duration(seconds: 6),
+                backgroundColor: AppColors.warning,
+                duration: const Duration(seconds: 4),
               ),
             );
           }
@@ -297,14 +320,14 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
 
         for (int i = 0; i < widget.attendees.length; i++) {
           final attInput = widget.attendees[i];
-          final raw = attendeesRaw[i] as Map<String, dynamic>;
+          final raw = attendeesRaw![i] as Map<String, dynamic>;
           final ticketId = raw['id'].toString().trim();
           final qrCode = (raw['productP'] ?? raw['qrCode']).toString().trim();
 
           issuedTickets.add(
             IssuedTicket(
               id: ticketId,
-              orderId: widget.bnbResponse.orderId,
+              orderId: _currentBnbResponse.orderId,
               eventTitle: widget.event.title,
               eventDate: widget.event.formattedDate,
               eventLocation: widget.event.location,
@@ -369,9 +392,10 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
     } catch (e) {
       if (isManual) {
         if (mounted) {
+          final safeMessage = ErrorSanitizer.sanitize(e);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error al consultar: ${e.toString().replaceAll("Exception: ", "")}'),
+              content: Text(safeMessage),
               backgroundColor: AppColors.error,
             ),
           );
@@ -418,7 +442,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
           child: Divider(height: 1, color: AppColors.border),
         ),
         title: Text(
-          _isExpired ? 'Orden Expirada' : 'Pago con QR Simple BNB',
+          _isExpired ? 'Orden Expirada' : 'Pago con QR Simple',
           style: const TextStyle(color: AppColors.fg, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         leading: IconButton(
@@ -432,7 +456,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
 
   Widget _buildExpiredView() {
     return BnbExpiredView(
-      bnbResponse: widget.bnbResponse,
+      bnbResponse: _currentBnbResponse,
       onBack: () => Navigator.pop(context),
     );
   }
@@ -455,7 +479,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Pago seguro acreditado directamente por la Red BNB / Banco Central',
+                  'Pago seguro acreditado directamente por la red bancaria nacional',
                   style: TextStyle(
                     color: AppColors.success.withValues(alpha: 0.9),
                     fontSize: 12,
@@ -475,7 +499,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
               const Text('Monto total a transferir', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
               const SizedBox(height: 4),
               Text(
-                'Bs. ${widget.bnbResponse.totalAmount.toStringAsFixed(2)}',
+                'Bs. ${_currentBnbResponse.totalAmount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   color: AppColors.accent,
                   fontSize: 34,
@@ -484,7 +508,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                '${widget.bnbResponse.eventTitle} • ${widget.selectedTier.name} (${widget.attendees.length} entrada${widget.attendees.length > 1 ? 's' : ''})',
+                '${_currentBnbResponse.eventTitle} • ${widget.selectedTier.name} (${widget.attendees.length} entrada${widget.attendees.length > 1 ? 's' : ''})',
                 style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
                 textAlign: TextAlign.center,
               ),

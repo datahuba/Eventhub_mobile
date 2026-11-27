@@ -5,6 +5,7 @@ class EventBottomPurchaseBar extends StatelessWidget {
   final double totalPrice;
   final bool isPast;
   final bool isSoldOut;
+  final bool isTierSoldOut;
   final bool hasSelectedTier;
   final VoidCallback? onPurchase;
 
@@ -13,15 +14,17 @@ class EventBottomPurchaseBar extends StatelessWidget {
     required this.totalPrice,
     required this.isPast,
     required this.isSoldOut,
+    this.isTierSoldOut = false,
     required this.hasSelectedTier,
     required this.onPurchase,
   });
 
-  bool get _isButtonDisabled => isPast || !hasSelectedTier || isSoldOut || onPurchase == null;
+  bool get _isButtonDisabled => isPast || !hasSelectedTier || isSoldOut || isTierSoldOut || onPurchase == null;
 
   String get _buttonText {
     if (isPast) return 'Evento Concluido';
     if (isSoldOut) return 'Entradas Agotadas';
+    if (isTierSoldOut) return 'Sector Agotado';
     return 'Comprar Entradas';
   }
 

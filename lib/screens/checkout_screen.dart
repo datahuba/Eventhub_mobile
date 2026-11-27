@@ -31,6 +31,7 @@ class CheckoutScreen extends StatefulWidget {
     'INVALID_ATTENDEE_CI': 'El C.I. ingresado no es válido',
     'INVALID_CI': 'El C.I. ingresado no es válido',
     'SECTOR_SOLD_OUT': 'Cupo agotado para este sector',
+    'TIER_SOLD_OUT': 'Cupo agotado para este sector',
     'OUT_OF_STOCK': 'Cupo agotado para este sector',
     'INSUFFICIENT_CAPACITY': 'Cupo agotado para este sector',
     'EVENT_NOT_FOUND': 'El evento seleccionado ya no está disponible',
@@ -181,6 +182,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         SnackBar(
           content: Text(userMessage),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -384,7 +386,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
                     )
                   : Text(
-                      'Pagar con QR Simple BNB (Bs. ${_totalPrice.toStringAsFixed(2)})',
+                      'Pagar con QR Simple (Bs. ${_totalPrice.toStringAsFixed(2)})',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
             ),

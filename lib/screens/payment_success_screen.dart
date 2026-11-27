@@ -107,7 +107,7 @@ class PaymentSuccessScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Voucher BNB:', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
+                          const Text('Comprobante / Ref:', style: TextStyle(color: AppColors.fgMuted, fontSize: 13)),
                           Text(
                             voucherId!,
                             style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),

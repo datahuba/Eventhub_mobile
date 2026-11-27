@@ -256,9 +256,9 @@ class _EventsScreenState extends State<EventsScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        '${snapshot.error}',
-                        style: const TextStyle(color: AppColors.fgMuted, fontSize: 13),
+                      const Text(
+                        'No pudimos conectar con el servidor en este momento. Por favor comprobá tu conexión o intentá nuevamente.',
+                        style: TextStyle(color: AppColors.fgMuted, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 20),

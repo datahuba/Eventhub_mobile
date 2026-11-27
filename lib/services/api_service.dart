@@ -4,6 +4,7 @@ import '../config/api_config.dart';
 import '../models/event.dart';
 import '../models/order.dart';
 import '../models/attendee.dart';
+import '../utils/error_sanitizer.dart';
 
 /// Enmascara tokens, credenciales y datos personales (PII) antes de registrar logs de depuración.
 String maskSensitiveData(String input) {
@@ -73,7 +74,7 @@ class ApiService {
       final response = await _client.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode >= 500) {
-        throw Exception('Servidor temporalmente no disponible (HTTP ${response.statusCode})');
+        throw Exception('El servicio de eventos no está disponible temporalmente.');
       }
 
       if (response.statusCode == 200) {
@@ -87,10 +88,10 @@ class ApiService {
         }
         return data.map((json) => Event.fromJson(json as Map<String, dynamic>)).toList();
       } else {
-        throw Exception('Error al cargar eventos (Código: ${response.statusCode})');
+        throw Exception('No se pudieron cargar los eventos');
       }
     } catch (e) {
-      throw Exception('No se pudo conectar con el servidor: $e');
+      throw Exception(ErrorSanitizer.sanitizeEvents(e));
     }
   }
 
@@ -101,7 +102,7 @@ class ApiService {
       final response = await _client.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode >= 500) {
-        throw Exception('Servidor temporalmente no disponible (HTTP ${response.statusCode})');
+        throw Exception('El servicio de eventos no está disponible temporalmente.');
       }
 
       if (response.statusCode == 200) {
@@ -115,14 +116,14 @@ class ApiService {
         }
         return Event.fromJson(data);
       } else {
-        throw Exception('Evento no encontrado (Código: ${response.statusCode})');
+        throw Exception('El evento solicitado no fue encontrado');
       }
     } catch (e) {
-      throw Exception('Error al consultar el evento: $e');
+      throw Exception(ErrorSanitizer.sanitizeEvents(e));
     }
   }
 
-  /// Inicia la compra y genera el QR Simple del BNB llamando a POST /api/payments/bnb/generate-qr
+  /// Inicia la compra y genera la orden con QR llamando a POST /api/payments/v1/orders
   Future<BnbQrResponse> generateBnbQr({
     required String eventId,
     required String buyerName,
@@ -155,10 +156,15 @@ class ApiService {
 
     if (response.statusCode >= 400) {
       final map = _tryDecodeJsonMap(response.body);
+      final errorObj = map?['error'] is Map<String, dynamic>
+          ? map!['error'] as Map<String, dynamic>
+          : null;
       throw ApiHttpException(
         statusCode: response.statusCode,
-        errorCode: _extractNonEmptyString(map?['code']),
-        serverMessage: _extractNonEmptyString(map?['message'] ?? map?['error']),
+        errorCode: _extractNonEmptyString(errorObj?['code'] ?? map?['code']),
+        serverMessage: _extractNonEmptyString(
+          errorObj?['message'] ?? map?['message'] ?? map?['error'],
+        ),
       );
     }
 
@@ -172,15 +178,29 @@ class ApiService {
       throw const FormatException('Respuesta JSON inesperada del servidor');
     }
 
-    if (decoded['success'] == true) {
-      return BnbQrResponse.fromJson(decoded);
+    if (decoded['success'] == false) {
+      final errorObj = decoded['error'] is Map<String, dynamic>
+          ? decoded['error'] as Map<String, dynamic>
+          : null;
+      throw ApiHttpException(
+        statusCode: response.statusCode,
+        errorCode: _extractNonEmptyString(errorObj?['code'] ?? decoded['code']),
+        serverMessage: _extractNonEmptyString(
+          errorObj?['message'] ?? decoded['message'] ?? decoded['error'],
+        ),
+      );
     }
 
-    throw ApiHttpException(
-      statusCode: response.statusCode,
-      errorCode: _extractNonEmptyString(decoded['code']),
-      serverMessage: _extractNonEmptyString(decoded['message'] ?? decoded['error']),
-    );
+    final bnbResponse = BnbQrResponse.fromJson(decoded);
+    if (bnbResponse.orderId.trim().isEmpty ||
+        bnbResponse.token == null ||
+        bnbResponse.token!.trim().isEmpty ||
+        bnbResponse.qrBase64.trim().isEmpty) {
+      throw const FormatException(
+        'Respuesta de orden incompleta: se requieren orderId, token y código QR',
+      );
+    }
+    return bnbResponse;
   }
 
   Map<String, dynamic>? _tryDecodeJsonMap(String body) {
@@ -197,38 +217,49 @@ class ApiService {
     return (text != null && text.isNotEmpty) ? text : null;
   }
 
-  /// Verifica el estado de acreditación del pago consultando POST /api/payments/bnb/check-status
+  /// Verifica el estado de acreditación del pago consultando POST /api/payments/v1/orders/:orderId/status
   Future<BnbStatusResponse> checkBnbStatus({
     required String orderId,
     String? qrId,
+    String? token,
   }) async {
+    if (token == null || token.trim().isEmpty) {
+      throw ArgumentError('Se requiere token de autorización (Bearer) para consultar el estado del pago');
+    }
+
     try {
-      final uri = Uri.parse(ApiConfig.checkBnbStatusEndpoint);
+      final uri = Uri.parse(ApiConfig.checkBnbStatusEndpoint(orderId));
       final body = jsonEncode({
-        'orderId': orderId,
         if (qrId != null && qrId.isNotEmpty) 'qrId': qrId,
       });
 
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
+
       final response = await _client.post(
         uri,
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: body,
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 500) {
-        throw Exception('El servidor está temporalmente fuera de servicio (HTTP ${response.statusCode})');
+        throw Exception('El servicio de pagos no está disponible temporalmente. Por favor intentá en unos minutos.');
       }
 
       final dynamic decoded = _safeJsonDecode(response.body);
 
       if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
-        return BnbStatusResponse.fromJson(decoded);
+        return BnbStatusResponse.fromJson(decoded, fallbackOrderId: orderId);
       } else {
-        final errorMsg = decoded is Map<String, dynamic> ? decoded['error'] : 'Error al verificar el estado del pago';
-        throw Exception(errorMsg ?? 'Error al verificar el estado del pago');
+        final rawError = decoded is Map<String, dynamic>
+            ? (decoded['message'] ?? decoded['error'])
+            : null;
+        throw Exception(ErrorSanitizer.sanitizePayment(rawError ?? 'No se pudo verificar el estado del pago'));
       }
     } catch (e) {
-      throw Exception('Error al verificar pago: $e');
+      throw Exception(ErrorSanitizer.sanitizePayment(e));
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
@@ -16,26 +17,28 @@ class EventDetailScreen extends StatefulWidget {
   static const int defaultMaxQuantity = 10;
 
   /// Retorna el tope máximo de entradas permitido para un sector.
-  /// Si el sector tiene capacity definida y mayor a 0, se respeta exactamente ese valor.
-  /// Si es null o no está definida, aplica el tope global por defecto (10).
+  /// Aplica siempre el tope global máximo de 10 entradas por orden: min(10, capacity).
+  /// Si el sector tiene capacity 0 o menor, retorna 0 (agotado).
+  /// Si capacity es null (sin capacidad especificada), retorna el tope global (10).
   static int maxQuantityForTier(TicketTier? tier) {
     if (tier == null) return defaultMaxQuantity;
     final cap = tier.capacity;
-    if (cap != null && cap > 0) {
-      return cap;
+    if (cap != null) {
+      if (cap <= 0) return 0;
+      return math.min(defaultMaxQuantity, cap);
     }
     return defaultMaxQuantity;
   }
 
-  /// Ajusta la cantidad solicitada según la capacidad del nuevo sector.
-  /// Si la capacidad es 0 o null, mantiene la cantidad previa sin tope.
+  /// Ajusta la cantidad solicitada según la capacidad del nuevo sector aplicando siempre
+  /// el tope global (min(10, capacity)).
+  /// Si la capacidad es 0, la cantidad pasa a ser 0.
+  /// Si se cambia a un sector sin capacidad (null), se topa al límite global de 10.
   static int clampQuantityForTier(int currentQuantity, TicketTier? tier) {
-    if (tier == null) return currentQuantity;
-    final maxCap = tier.capacity;
-    if (maxCap != null && maxCap > 0 && currentQuantity > maxCap) {
-      return maxCap;
-    }
-    return currentQuantity;
+    final maxCap = maxQuantityForTier(tier);
+    if (maxCap <= 0) return 0;
+    if (currentQuantity > maxCap) return maxCap;
+    return currentQuantity < 1 ? 1 : currentQuantity;
   }
 
   @override
@@ -49,10 +52,17 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.event.tiers.isNotEmpty) {
+    // Priorizar el primer sector que tenga entradas disponibles
+    final available = widget.event.tiers.where((t) => t.capacity == null || t.capacity! > 0).toList();
+    if (available.isNotEmpty) {
+      _selectedTier = available.first;
+      _quantity = 1;
+    } else if (widget.event.tiers.isNotEmpty) {
       _selectedTier = widget.event.tiers.first;
+      _quantity = 0;
     } else {
       _selectedTier = null;
+      _quantity = 0;
     }
   }
 
@@ -464,19 +474,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         totalPrice: _totalPrice,
         isPast: event.isPast,
         isSoldOut: event.isSoldOut,
+        isTierSoldOut: _selectedTier != null && _selectedTier!.capacity != null && _selectedTier!.capacity! <= 0,
         hasSelectedTier: _selectedTier != null,
-        onPurchase: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CheckoutScreen(
-                event: event,
-                selectedTier: _selectedTier!,
-                quantity: _quantity,
-              ),
-            ),
-          );
-        },
+        onPurchase: (_selectedTier != null && _selectedTier!.capacity != null && _selectedTier!.capacity! <= 0)
+            ? null
+            : () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CheckoutScreen(
+                      event: event,
+                      selectedTier: _selectedTier!,
+                      quantity: _quantity,
+                    ),
+                  ),
+                );
+              },
       ),
     );
   }
