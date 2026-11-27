@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/event.dart';
@@ -229,6 +230,30 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Error al verificar pago: $e');
+    }
+  }
+
+  /// Cancela/libera una orden BNB pendiente llamando a POST /api/payments/bnb/cancel
+  /// en modo fire-and-forget sin propagar excepciones durante dispose().
+  Future<void> cancelOrder(String orderId) async {
+    final trimmedId = orderId.trim();
+    if (trimmedId.isEmpty) return;
+
+    try {
+      final uri = Uri.parse(ApiConfig.cancelBnbOrderEndpoint);
+      await _client
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'orderId': trimmedId}),
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          'Error al cancelar orden BNB pendiente: ${maskSensitiveData(e.toString())}',
+        );
+      }
     }
   }
 }

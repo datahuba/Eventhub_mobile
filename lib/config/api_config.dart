@@ -75,4 +75,5 @@ class ApiConfig {
   static String eventDetailEndpoint(String id) => '$baseUrl/events/$id';
   static String get generateBnbQrEndpoint => '$baseUrl/payments/bnb/generate-qr';
   static String get checkBnbStatusEndpoint => '$baseUrl/payments/bnb/check-status';
+  static String get cancelBnbOrderEndpoint => '$baseUrl/payments/bnb/cancel';
 }

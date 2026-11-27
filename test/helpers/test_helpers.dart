@@ -16,6 +16,8 @@ class FakeApiService extends ApiService {
   int? throwExceptionTimes;
   int generateBnbQrCallCount = 0;
   int getEventsCallCount = 0;
+  int cancelOrderCallCount = 0;
+  final List<String> cancelledOrderIds = [];
   BnbQrResponse? bnbQrResponseToReturn;
   Exception? generateBnbQrException;
   Object? generateBnbQrError;
@@ -86,6 +88,11 @@ class FakeApiService extends ApiService {
       attendeesRaw: attendeesRawToReturn,
       voucherId: voucherIdToReturn,
     );
+  }
+  @override
+  Future<void> cancelOrder(String orderId) async {
+    cancelOrderCallCount++;
+    cancelledOrderIds.add(orderId);
   }
 }
 

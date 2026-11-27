@@ -45,6 +45,7 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
   Uint8List? _qrBytes;
   bool _isChecking = false;
   bool _isExpired = false;
+  bool _paymentCompleted = false;
   bool _qrDecodeFailed = false;
   bool _retryFailed = false;
   bool _isRetryingQr = false;
@@ -77,6 +78,9 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
     _countdownTimer?.cancel();
     _countdownTimer = null;
     _consecutivePollFailures = 0;
+    if (!_paymentCompleted && !_isExpired && widget.bnbResponse.orderId.trim().isNotEmpty) {
+      unawaited(_apiService.cancelOrder(widget.bnbResponse.orderId));
+    }
     super.dispose();
   }
 
@@ -324,6 +328,8 @@ class _BnbPaymentScreenState extends State<BnbPaymentScreen> {
         await _storageService.saveTickets(issuedTickets);
 
         if (!mounted) return;
+
+        _paymentCompleted = true;
 
         // Navegar a la pantalla de confirmación y tickets
         Navigator.pushReplacement(
