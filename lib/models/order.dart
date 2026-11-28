@@ -8,6 +8,8 @@ class BnbQrResponse {
   final String eventTitle;
   final String tier;
   final int quantity;
+  final DateTime? expiresAt;
+  final int? expiresInSeconds;
 
   BnbQrResponse({
     required this.success,
@@ -19,7 +21,21 @@ class BnbQrResponse {
     required this.eventTitle,
     required this.tier,
     required this.quantity,
+    this.expiresAt,
+    this.expiresInSeconds,
   });
+
+  /// Calcula los segundos restantes para la vigencia de la orden BNB.
+  int resolveRemainingSeconds({int defaultSeconds = 15 * 60}) {
+    if (expiresAt != null) {
+      final diffMs = expiresAt!.difference(DateTime.now()).inMilliseconds;
+      return diffMs <= 0 ? 0 : (diffMs / 1000).ceil();
+    }
+    if (expiresInSeconds != null) {
+      return expiresInSeconds! <= 0 ? 0 : expiresInSeconds!;
+    }
+    return defaultSeconds;
+  }
 
   factory BnbQrResponse.fromJson(Map<String, dynamic> json) {
     double parsedAmount = 0.0;
@@ -27,6 +43,21 @@ class BnbQrResponse {
       parsedAmount = (json['totalAmount'] as num).toDouble();
     } else if (json['totalAmount'] is String) {
       parsedAmount = double.tryParse(json['totalAmount']) ?? 0.0;
+    }
+
+    DateTime? parsedExpiresAt;
+    if (json['expiresAt'] != null) {
+      parsedExpiresAt = DateTime.tryParse(json['expiresAt'].toString());
+    }
+
+    int? parsedExpiresIn;
+    final rawTtl = json['expiresInSeconds'] ?? json['ttlSeconds'];
+    if (rawTtl is int) {
+      parsedExpiresIn = rawTtl;
+    } else if (rawTtl is num) {
+      parsedExpiresIn = rawTtl.toInt();
+    } else if (rawTtl is String) {
+      parsedExpiresIn = int.tryParse(rawTtl);
     }
 
     return BnbQrResponse(
@@ -39,6 +70,8 @@ class BnbQrResponse {
       eventTitle: json['eventTitle']?.toString() ?? '',
       tier: json['tier']?.toString() ?? '',
       quantity: json['quantity'] is int ? json['quantity'] : 1,
+      expiresAt: parsedExpiresAt,
+      expiresInSeconds: parsedExpiresIn,
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:eventhub_mobile/services/storage_service.dart';
 
 class FakeApiService extends ApiService {
   int checkStatusCallCount = 0;
+  final List<({String orderId, String? qrId})> checkStatusCalls = [];
   PaymentVerificationStatus statusToReturn;
   List<dynamic>? attendeesRawToReturn;
   String? voucherIdToReturn;
@@ -70,6 +71,7 @@ class FakeApiService extends ApiService {
     String? qrId,
   }) async {
     checkStatusCallCount++;
+    checkStatusCalls.add((orderId: orderId, qrId: qrId));
     if (checkStatusDelay != null) {
       await Future.delayed(checkStatusDelay!);
     }
@@ -136,17 +138,26 @@ Event createDummyEvent() {
   );
 }
 
-BnbQrResponse createDummyBnbResponse({String? qrBase64}) {
+BnbQrResponse createDummyBnbResponse({
+  String? qrBase64,
+  String orderId = 'ORD-12345',
+  String qrId = 'QR-999',
+  double totalAmount = 100.0,
+  DateTime? expiresAt,
+  int? expiresInSeconds,
+}) {
   return BnbQrResponse(
     success: true,
-    orderId: 'ORD-12345',
-    qrId: 'QR-999',
+    orderId: orderId,
+    qrId: qrId,
     qrBase64: qrBase64 ??
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-    totalAmount: 100.0,
+    totalAmount: totalAmount,
     currency: 'BOB',
     eventTitle: 'Concierto de Prueba',
     tier: 'General',
     quantity: 1,
+    expiresAt: expiresAt,
+    expiresInSeconds: expiresInSeconds,
   );
 }
